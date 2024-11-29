@@ -10,13 +10,13 @@ using namespace phantom;
 
 class Encoder {
  private:
-  PhantomContext *context;
-  PhantomCKKSEncoder *encoder;
+  std::shared_ptr<PhantomContext> context;
+  std::shared_ptr<PhantomCKKSEncoder> encoder;
 
  public:
   Encoder() = default;
 
-  Encoder(PhantomContext *context, PhantomCKKSEncoder *encoder) {
+  Encoder(std::shared_ptr<PhantomContext> context, std::shared_ptr<PhantomCKKSEncoder> encoder) {
     this->context = context;
     this->encoder = encoder;
   }
@@ -77,13 +77,13 @@ class Encoder {
 
 class Encryptor {
  private:
-  PhantomContext *context;
-  PhantomPublicKey *encryptor;
+  std::shared_ptr<PhantomContext> context;
+  std::shared_ptr<PhantomPublicKey> encryptor;
 
  public:
   Encryptor() = default;
 
-  Encryptor(PhantomContext *context, PhantomPublicKey *encryptor) {
+  Encryptor(std::shared_ptr<PhantomContext> context, std::shared_ptr<PhantomPublicKey> encryptor) {
     this->context = context;
     this->encryptor = encryptor;
   }
@@ -96,13 +96,13 @@ class Encryptor {
 // Symmetric Encryptor
 // class Encryptor {
 //  private:
-//   PhantomContext *context;
-//   PhantomSecretKey *encryptor;
+//   std::shared_ptr<PhantomContext> context;
+//   std::shared_ptr<PhantomSecretKey> encryptor;
 
 //  public:
 //   Encryptor() = default;
 
-//   Encryptor(PhantomContext *context, PhantomSecretKey *encryptor) {
+//   Encryptor(std::shared_ptr<PhantomContext> context, std::shared_ptr<PhantomSecretKey> encryptor) {
 //     this->context = context;
 //     this->encryptor = encryptor;
 //   }
@@ -114,12 +114,12 @@ class Encryptor {
 
 class Evaluator {
  private:
-  PhantomContext *context;
-  PhantomCKKSEncoder *encoder;
+  std::shared_ptr<PhantomContext> context;
+  std::shared_ptr<PhantomCKKSEncoder> encoder;
 
  public:
   Evaluator() = default;
-  Evaluator(PhantomContext *context, PhantomCKKSEncoder *encoder) {
+  Evaluator(std::shared_ptr<PhantomContext> context, std::shared_ptr<PhantomCKKSEncoder> encoder) {
     this->context = context;
     this->encoder = encoder;
   }
@@ -395,12 +395,12 @@ class Evaluator {
 
 class Decryptor {
  private:
-  PhantomContext *context;
-  PhantomSecretKey *decryptor;
+  std::shared_ptr<PhantomContext> context;
+  std::shared_ptr<PhantomSecretKey> decryptor;
 
  public:
   Decryptor() = default;
-  Decryptor(PhantomContext *context, PhantomSecretKey *decryptor) {
+  Decryptor(std::shared_ptr<PhantomContext> context, std::shared_ptr<PhantomSecretKey> decryptor) {
     this->context = context;
     this->decryptor = decryptor;
   }
@@ -439,9 +439,9 @@ class CKKSEvaluator {
 
  public:
   // Memory managed outside of the evaluator
-  PhantomContext *context;
-  PhantomRelinKey *relin_keys;
-  PhantomGaloisKey *galois_keys;
+  std::shared_ptr<PhantomContext> context;
+  std::shared_ptr<PhantomRelinKey> relin_keys;
+  std::shared_ptr<PhantomGaloisKey> galois_keys;
   std::vector<std::uint32_t> galois_elts;
 
   // Component classes
@@ -454,9 +454,16 @@ class CKKSEvaluator {
   double scale;
   size_t slot_count;
 
-  CKKSEvaluator(PhantomContext *context, PhantomPublicKey *encryptor, PhantomSecretKey *decryptor,
-                PhantomCKKSEncoder *encoder, PhantomRelinKey *relin_keys, PhantomGaloisKey *galois_keys,
-                double scale, vector<uint32_t> galois_elts = {}) {
+  CKKSEvaluator(
+    std::shared_ptr<PhantomContext> context, 
+    std::shared_ptr<PhantomPublicKey> encryptor, 
+    std::shared_ptr<PhantomSecretKey> decryptor,
+    std::shared_ptr<PhantomCKKSEncoder> encoder, 
+    std::shared_ptr<PhantomRelinKey> relin_keys, 
+    std::shared_ptr<PhantomGaloisKey> galois_keys,
+    double scale, 
+    vector<uint32_t> galois_elts = {}
+  ) {
     this->context = context;
     this->relin_keys = relin_keys;
     this->galois_keys = galois_keys;

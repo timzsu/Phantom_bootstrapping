@@ -62,18 +62,17 @@ void examples_ckks_bootstrapping() {
   parms.set_secret_key_hamming_weight(secret_key_hamming_weight);
   parms.set_sparse_slots(sparse_slots);
 
-  PhantomContext context(parms);
+  auto context = std::make_shared<PhantomContext>(parms);
+  auto secret_key = std::make_shared<PhantomSecretKey>(*context);
+  auto public_key = std::make_shared<PhantomPublicKey>(secret_key->gen_publickey(*context));
+  auto relin_keys = std::make_shared<PhantomRelinKey>(secret_key->gen_relinkey(*context));
+  auto galois_keys = std::make_shared<PhantomGaloisKey>();
 
-  PhantomSecretKey secret_key(context);
-  PhantomPublicKey public_key = secret_key.gen_publickey(context);
-  PhantomRelinKey relin_keys = secret_key.gen_relinkey(context);
-  PhantomGaloisKey galois_keys;
+  auto encoder = std::make_shared<PhantomCKKSEncoder>(*context);
 
-  PhantomCKKSEncoder encoder(context);
+  CKKSEvaluator ckks_evaluator(context, public_key, secret_key, encoder, relin_keys, galois_keys, scale);
 
-  CKKSEvaluator ckks_evaluator(&context, &public_key, &secret_key, &encoder, &relin_keys, &galois_keys, scale);
-
-  size_t slot_count = encoder.slot_count();
+  size_t slot_count = encoder->slot_count();
 
   Bootstrapper bootstrapper(
       loge,
