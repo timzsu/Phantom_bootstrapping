@@ -1,0 +1,1291 @@
+diff --git a/include/ciphertext.h b/include/ciphertext.h
+index 2d4dc93..f8f4b15 100644
+--- a/include/ciphertext.h
++++ b/include/ciphertext.h
+@@ -86,6 +86,39 @@ public:
+         coeff_modulus_size_ = coeff_modulus_size;
+     }
+ 
++    // Newly added
++    void resize(const PhantomContext &context, size_t chain_index, const cudaStream_t &stream) {
++        auto &context_data = context.get_context_data(chain_index);
++        auto &parms = context_data.parms();
++        auto &coeff_modulus = parms.coeff_modulus();
++        auto coeff_modulus_size = coeff_modulus.size();
++        auto poly_modulus_degree = parms.poly_modulus_degree();
++
++        size_t old_size = size_ * coeff_modulus_size_ * poly_modulus_degree_;
++        size_t new_size = size_ * coeff_modulus_size * poly_modulus_degree;
++
++        if (new_size == 0) {
++            data_.reset();
++            return;
++        }
++
++        if (new_size != old_size) {
++            auto prev_data(std::move(data_));
++            data_ = phantom::util::make_cuda_auto_ptr<uint64_t>(size_ * coeff_modulus_size * poly_modulus_degree, stream);
++            
++            // Initialize the data to 0
++            cudaMemsetAsync(data_.get(), 0, size_ * coeff_modulus_size * poly_modulus_degree * sizeof(uint64_t), stream);
++
++            size_t copy_size = std::min(old_size, new_size);
++            cudaMemcpyAsync(data_.get(), prev_data.get(), copy_size * sizeof(uint64_t), cudaMemcpyDeviceToDevice,
++                            stream);
++        }
++
++        chain_index_ = chain_index;
++        poly_modulus_degree_ = poly_modulus_degree;
++        coeff_modulus_size_ = coeff_modulus_size;
++    }
++
+     void resize(size_t size, size_t coeff_modulus_size, size_t poly_modulus_degree, const cudaStream_t &stream) {
+         size_t old_size = size_ * coeff_modulus_size_ * poly_modulus_degree_;
+         size_t new_size = size * coeff_modulus_size * poly_modulus_degree;
+@@ -156,6 +189,11 @@ public:
+         return parms_id_;
+     }
+ 
++    // Newly added to provide a similar API to SEAL for getting context data
++    [[nodiscard]] std::size_t params_id() const noexcept {
++        return chain_index_;
++    }
++
+     [[nodiscard]] auto &chain_index() const noexcept {
+         return chain_index_;
+     }
+@@ -172,6 +210,11 @@ public:
+         return scale_;
+     }
+ 
++    // Newly added to make scale easily modifiable
++    [[nodiscard]] auto &scale() noexcept {
++        return scale_;
++    }
++
+     [[nodiscard]] auto &correction_factor() const noexcept {
+         return correction_factor_;
+     }
+@@ -180,6 +223,10 @@ public:
+         return data_.get();
+     }
+ 
++    [[nodiscard]] auto data(size_t poly_index) const {
++        return data_.get() + poly_index * (poly_modulus_degree_ * coeff_modulus_size_);
++    }
++
+     [[nodiscard]] auto &data_ptr() {
+         return data_;
+     }
+diff --git a/include/ckks.h b/include/ckks.h
+index c937acb..a86be42 100644
+--- a/include/ckks.h
++++ b/include/ckks.h
+@@ -6,6 +6,7 @@
+ #include "plaintext.h"
+ #include "rns.cuh"
+ 
++#include <complex>
+ #include <cuComplex.h>
+ 
+ class PhantomCKKSEncoder {
+@@ -14,6 +15,7 @@ private:
+ 
+     uint32_t slots_{};
+     uint32_t sparse_slots_ = 0;
++    uint32_t decoding_sparse_slots_ = 0;
+     std::unique_ptr<phantom::util::ComplexRoots> complex_roots_;
+     std::vector<cuDoubleComplex> root_powers_;
+     std::vector<uint32_t> rotation_group_;
+@@ -38,6 +40,18 @@ private:
+         encode_internal(context, input.data(), values_size, chain_index, scale, destination, stream);
+     }
+ 
++    inline void encode_internal(const PhantomContext &context,
++                                const std::complex<double> *values, size_t values_size,
++                                size_t chain_index, double scale,
++                                PhantomPlaintext &destination,
++                                const cudaStream_t &stream) {
++        std::vector<cuDoubleComplex> input(values_size);
++        for (size_t i = 0; i < values_size; i++) {
++            input[i] = make_cuDoubleComplex(values[i].real(), values[i].imag());
++        }
++        encode_internal(context, input.data(), values_size, chain_index, scale, destination, stream);
++    }
++
+     void decode_internal(const PhantomContext &context,
+                          const PhantomPlaintext &plain,
+                          cuDoubleComplex *destination,
+@@ -47,9 +61,10 @@ private:
+                                 const PhantomPlaintext &plain,
+                                 double *destination,
+                                 const cudaStream_t &stream) {
+-        std::vector<cuDoubleComplex> output(sparse_slots_);
++        auto decoding_sparse_slots = decoding_sparse_slots_ == 0 ? sparse_slots_ : decoding_sparse_slots_;
++        std::vector<cuDoubleComplex> output(decoding_sparse_slots);
+         decode_internal(context, plain, output.data(), stream);
+-        for (size_t i = 0; i < sparse_slots_; i++)
++        for (size_t i = 0; i < decoding_sparse_slots; i++)
+             destination[i] = output[i].x;
+     }
+ 
+@@ -96,10 +111,28 @@ public:
+                        std::vector<T> &destination,
+                        const phantom::util::cuda_stream_wrapper &stream_wrapper = *phantom::util::global_variables::default_stream) {
+         const auto &s = stream_wrapper.get_stream();
+-        destination.resize(sparse_slots_);
++        auto decoding_sparse_slots = decoding_sparse_slots_ == 0 ? sparse_slots_ : decoding_sparse_slots_;
++        destination.resize(decoding_sparse_slots);
+         decode_internal(context, plain, destination.data(), s);
+     }
+ 
++    inline void decode(const PhantomContext &context,
++                       const PhantomPlaintext &plain,
++                       std::vector<std::complex<double>> &destination,
++                       const phantom::util::cuda_stream_wrapper &stream_wrapper = *phantom::util::global_variables::default_stream) {
++        const auto &s = stream_wrapper.get_stream();
++        auto decoding_sparse_slots = decoding_sparse_slots_ == 0 ? sparse_slots_ : decoding_sparse_slots_;
++        destination.resize(decoding_sparse_slots);
++
++        std::vector<cuDoubleComplex> output(decoding_sparse_slots);
++        decode_internal(context, plain, output.data(), s);
++
++        for (size_t i = 0; i < decoding_sparse_slots; i++) {
++            destination[i] = std::complex<double>(output[i].x, output[i].y);
++        }
++        output.clear();
++    }
++
+     template<class T>
+     [[nodiscard]] inline auto decode(const PhantomContext &context, const PhantomPlaintext &plain,
+                                      const phantom::util::cuda_stream_wrapper &stream_wrapper = *phantom::util::global_variables::default_stream) {
+@@ -112,6 +145,14 @@ public:
+         return slots_;
+     }
+ 
++    // TODO: we may not need this
++    // Newly added to provide information about the length of additional messages
++    // allowed for encoding after the first call to `encode`
++    [[nodiscard]] inline std::size_t message_length() const noexcept {
++        if (sparse_slots_ == 0) return slots_;
++        return sparse_slots_;
++    }
++
+     auto &gpu_ckks_msg_vec() {
+         return *gpu_ckks_msg_vec_;
+     }
+diff --git a/include/context.cuh b/include/context.cuh
+index 03996c1..fd9498e 100644
+--- a/include/context.cuh
++++ b/include/context.cuh
+@@ -10,7 +10,6 @@
+ #include "galois.cuh"
+ #include "gputype.h"
+ #include "rns.cuh"
+-#include "util/galois.h"
+ #include "util.cuh"
+ #include "cuda_wrapper.cuh"
+ 
+@@ -126,6 +125,9 @@ namespace phantom {
+         // Return the index (start from 0) for the parameters, when context chain is generated
+         [[nodiscard]] std::size_t chain_index() const noexcept { return chain_index_; }
+ 
++        // Newly added to provide a method with similar functionality as SEAL's chain_index()
++        [[nodiscard]] std::size_t chain_depth() const noexcept { return total_coeff_modulus_.size() - 1; }
++
+         void set_chain_index(const std::size_t chain_index) noexcept { chain_index_ = chain_index; }
+     };
+ 
+diff --git a/include/cuda_wrapper.cuh b/include/cuda_wrapper.cuh
+index cc6c97f..5116db8 100644
+--- a/include/cuda_wrapper.cuh
++++ b/include/cuda_wrapper.cuh
+@@ -28,7 +28,7 @@ inline void check(T err, const char *const func, const char *const file,
+                   << std::endl;
+         std::cerr << cudaGetErrorString(err) << " " << func
+                   << std::endl;
+-//        std::exit(EXIT_FAILURE);
++        std::exit(EXIT_FAILURE);
+     }
+ }
+ 
+@@ -47,6 +47,7 @@ namespace phantom::util {
+     class cuda_stream_wrapper {
+     public:
+         cuda_stream_wrapper() {
++            cudaSetDevice(0); // TODO: remove me
+             cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+         }
+ 
+diff --git a/include/evaluate.cuh b/include/evaluate.cuh
+index 81de377..dc8f6f8 100644
+--- a/include/evaluate.cuh
++++ b/include/evaluate.cuh
+@@ -231,15 +231,13 @@ inline auto mod_switch_to(const PhantomContext &context, const PhantomPlaintext
+     return destination;
+ }
+ 
+-void apply_galois_inplace(const PhantomContext &context, PhantomCiphertext &encrypted, size_t galois_elt_index,
+-                          const PhantomGaloisKey &galois_keys,
++void apply_galois_inplace(const PhantomContext &context, PhantomCiphertext &encrypted, uint32_t galois_elt, const PhantomGaloisKey &galois_keys,
+                           const phantom::util::cuda_stream_wrapper &stream_wrapper = *phantom::util::global_variables::default_stream);
+ 
+-inline auto apply_galois(const PhantomContext &context, const PhantomCiphertext &encrypted, size_t galois_elt_index,
+-                         const PhantomGaloisKey &galois_keys,
++inline auto apply_galois(const PhantomContext &context, const PhantomCiphertext &encrypted, uint32_t galois_elt, const PhantomGaloisKey &galois_keys,
+                          const phantom::util::cuda_stream_wrapper &stream_wrapper = *phantom::util::global_variables::default_stream) {
+     PhantomCiphertext destination = encrypted;
+-    apply_galois_inplace(context, destination, galois_elt_index, galois_keys, stream_wrapper);
++    apply_galois_inplace(context, destination, galois_elt, galois_keys, stream_wrapper);
+     return destination;
+ }
+ 
+diff --git a/include/plaintext.h b/include/plaintext.h
+index 6e1d885..a26892e 100644
+--- a/include/plaintext.h
++++ b/include/plaintext.h
+@@ -55,6 +55,10 @@ public:
+         return parms_id_;
+     }
+ 
++    [[nodiscard]] auto &parms_id() noexcept {
++        return parms_id_;
++    }
++
+     [[nodiscard]] auto &chain_index() const noexcept {
+         return chain_index_;
+     }
+@@ -63,9 +67,17 @@ public:
+         return scale_;
+     }
+ 
++    [[nodiscard]] auto &scale() noexcept {
++        return scale_;
++    }
++
+     [[nodiscard]] auto data() const noexcept {
+         return data_.get();
+     }
++    
++    [[nodiscard]] auto data(size_t coeff_index) noexcept {
++        return data_.get() + coeff_index;
++    }
+ 
+     [[nodiscard]] auto &data_ptr() noexcept {
+         return data_;
+diff --git a/include/rns_base.cuh b/include/rns_base.cuh
+index 3458f2d..2a02a76 100644
+--- a/include/rns_base.cuh
++++ b/include/rns_base.cuh
+@@ -47,5 +47,9 @@ namespace phantom::arith {
+         void compose_array(cuDoubleComplex *dst, const uint64_t *src, const uint64_t *upper_half_threshold,
+                            double inv_scale, uint32_t coeff_count, uint32_t sparse_coeff_count,
+                            uint32_t sparse_ratio, const cudaStream_t &stream) const;
++        
++        void compose_array(cuDoubleComplex *dst, const uint64_t *src, const uint64_t *upper_half_threshold,
++                           double inv_scale, uint32_t coeff_count, uint32_t sparse_coeff_count,
++                           uint32_t sparse_ratio, uint32_t decoding_sparse_ratio, const cudaStream_t &stream) const;
+     };
+ }
+diff --git a/include/secretkey.h b/include/secretkey.h
+index d37bf5c..cbaf95d 100644
+--- a/include/secretkey.h
++++ b/include/secretkey.h
+@@ -1,4 +1,5 @@
+ #pragma once
++#include <fstream>
+ 
+ #include "context.cuh"
+ 
+@@ -34,6 +35,8 @@ private:
+                                                    size_t chain_index,
+                                                    bool is_ntt_form, const cudaStream_t &stream) const;
+ 
++public:
++
+     /** Encrypt zero using the public key, and perform the model switch is necessary
+      * @brief pk [pk0, pk1], ternary variable u, cbd (gauss) noise e0, e1, return [pk0*u+e0, pk1*u+e1]
+      * @param[in] context PhantomContext
+@@ -170,15 +173,6 @@ private:
+ 
+     void gen_secretkey(const PhantomContext &context, const cudaStream_t &stream);
+ 
+-    /** Encrypt zero using the secret key, the ciphertext is in NTT form
+-     * @param[in] context PhantomContext
+-     * @param[inout] cipher The generated ciphertext
+-     * @param[in] chain_index The index of the context data
+-     * @param[in] is_ntt_form Whether the ciphertext needs to be in NTT form
+-     */
+-    void encrypt_zero_symmetric(const PhantomContext &context, PhantomCiphertext &cipher, const uint8_t *prng_seed_a,
+-                                size_t chain_index, bool is_ntt_form, const cudaStream_t &stream) const;
+-
+     /** Generate one public key for this secret key
+      * Return PhantomPublicKey
+      * @param[in] context PhantomContext
+@@ -222,6 +216,19 @@ public:
+ 
+     [[nodiscard]] PhantomGaloisKey create_galois_keys(const PhantomContext &context) const;
+ 
++    [[nodiscard]] PhantomGaloisKey create_galois_keys_from_elts(PhantomContext &context,const std::vector<uint32_t> &elts) const;
++
++    [[nodiscard]] PhantomGaloisKey create_galois_keys_from_steps(PhantomContext &context, const std::vector<int> &steps) const; 
++
++    /** Encrypt zero using the secret key, the ciphertext is in NTT form
++     * @param[in] context PhantomContext
++     * @param[inout] cipher The generated ciphertext
++     * @param[in] chain_index The index of the context data
++     * @param[in] is_ntt_form Whether the ciphertext needs to be in NTT form
++     */
++    void encrypt_zero_symmetric(const PhantomContext &context, PhantomCiphertext &cipher, const uint8_t *prng_seed_a,
++                                size_t chain_index, bool is_ntt_form, const cudaStream_t &stream) const;
++
+     /** Symmetric encryption, the plaintext and ciphertext are in NTT form
+      * @param[in] context PhantomContext
+      * @param[in] plain The data to be encrypted
+@@ -267,4 +274,25 @@ public:
+     */
+     [[nodiscard]] int invariant_noise_budget(const PhantomContext &context, const PhantomCiphertext &cipher,
+                                              const phantom::util::cuda_stream_wrapper &stream_wrapper = *phantom::util::global_variables::default_stream);
++
++    // Newly added for debugging purposes
++    inline void load_secret_key(const PhantomContext &context, std::ifstream &sk_in) {
++      std::string line;
++      size_t total_line_count = 0;
++    
++      auto new_sk_array_data = new uint64_t[context.coeff_mod_size_ * context.poly_degree_];
++    
++      while (std::getline(sk_in, line)) {
++        uint64_t value = std::stoull(line);
++        new_sk_array_data[total_line_count] = value;
++        total_line_count++;
++      }
++    
++      if (total_line_count != context.coeff_mod_size_ * context.poly_degree_) {
++        throw std::invalid_argument("Invalid secret key input.");
++      }
++    
++      cudaMemcpy(secret_key_array_.get(), new_sk_array_data, context.coeff_mod_size_ * context.poly_degree_ * sizeof(uint64_t), cudaMemcpyHostToDevice);
++      delete[] new_sk_array_data;
++    }
+ };
+diff --git a/include/uintmath.cuh b/include/uintmath.cuh
+index 93f6ba4..65b6456 100644
+--- a/include/uintmath.cuh
++++ b/include/uintmath.cuh
+@@ -464,7 +464,7 @@ namespace phantom::arith {
+ 
+             // Clip the maximum shift to determine only the integer
+             // (as opposed to fractional) bits.
+-            uint32_t numerator_shift = min(denominator_bits - numerator_bits, remaining_shifts);
++            uint32_t numerator_shift = umin(denominator_bits - numerator_bits, remaining_shifts);
+ 
+             // Shift and update numerator.
+             // This may be faster; first set to zero and then update if needed
+diff --git a/include/util/common.h b/include/util/common.h
+index 225d730..9c22a0a 100644
+--- a/include/util/common.h
++++ b/include/util/common.h
+@@ -270,7 +270,7 @@ namespace phantom::arith {
+ 
+     constexpr int nibbles_per_uint64 = bytes_per_uint64 * nibbles_per_byte;
+ 
+-    [[nodiscard]] inline constexpr int hamming_weight(unsigned char value) {
++    [[nodiscard]] inline constexpr int _weight(unsigned char value) {
+         int t = static_cast<int>(value);
+         t -= (t >> 1) & 0x55;
+         t = (t & 0x33) + ((t >> 2) & 0x33);
+diff --git a/include/util/encryptionparams.h b/include/util/encryptionparams.h
+index 298c5f9..64c950c 100644
+--- a/include/util/encryptionparams.h
++++ b/include/util/encryptionparams.h
+@@ -114,6 +114,40 @@ namespace phantom {
+             compute_parms_id();
+         }
+ 
++        inline void set_secret_key_hamming_weight(std::size_t secret_key_hamming_weight)
++        {
++            if (scheme_ == scheme_type::none && secret_key_hamming_weight)
++            {
++                throw std::logic_error("secret key hamming weight is not supported for this scheme");
++            }
++
++            // Set the degree
++            secret_key_hamming_weight_ = secret_key_hamming_weight;
++
++            // Re-compute the parms_id
++            compute_parms_id();
++        }
++
++        // Manually specify CKKSEncoder's sparse slots
++        inline void set_sparse_slots(std::size_t sparse_slots)
++        {
++            if (scheme_ == scheme_type::none && sparse_slots)
++            {
++                throw std::logic_error("secret key hamming weight is not supported for this scheme");
++            }
++
++            if ((sparse_slots & (sparse_slots - 1)) != 0)
++            {
++                throw std::logic_error("secret key hamming weight is not zero or power-of-two");
++            }
++
++            // Set the degree
++            sparse_slots_= sparse_slots;
++
++            // Re-compute the parms_id
++            compute_parms_id();
++        }
++
+         inline void set_galois_elts(const std::vector<uint32_t> &galois_elts) {
+             galois_elts_ = galois_elts;
+         }
+@@ -194,6 +228,14 @@ namespace phantom {
+             return special_modulus_size_;
+         }
+ 
++        [[nodiscard]] inline std::size_t secret_key_hamming_weight() const noexcept {
++            return secret_key_hamming_weight_;
++        }
++
++        [[nodiscard]] inline std::size_t sparse_slots() const noexcept {
++            return sparse_slots_;
++        }
++
+         [[nodiscard]] inline auto galois_elts() const noexcept {
+             return galois_elts_;
+         }
+@@ -332,6 +374,10 @@ namespace phantom {
+         // default is 1
+         std::size_t special_modulus_size_ = 1;
+ 
++        std::size_t secret_key_hamming_weight_ = 0;
++
++        std::size_t sparse_slots_ = 0;
++
+         // used for hybrid key-switching
+         std::vector<arith::Modulus> key_modulus_{};
+ 
+diff --git a/include/util/galois.h b/include/util/galois.h
+deleted file mode 100644
+index 987843c..0000000
+--- a/include/util/galois.h
++++ /dev/null
+@@ -1,64 +0,0 @@
+-// Copyright (c) Microsoft Corporation. All rights reserved.
+-// Licensed under the MIT license.
+-
+-#pragma once
+-
+-#include "modulus.h"
+-#include "defines.h"
+-#include "common.h"
+-#include <cstddef>
+-#include <cstdint>
+-#include <stdexcept>
+-#include <memory>
+-
+-namespace phantom::arith {
+-    class GaloisTool {
+-    public:
+-        explicit GaloisTool(int coeff_count_power) {
+-            initialize(coeff_count_power);
+-        }
+-
+-        GaloisTool(const GaloisTool &copy) = delete;
+-
+-        GaloisTool(GaloisTool &&source) = delete;
+-
+-        GaloisTool &operator=(const GaloisTool &assign) = delete;
+-
+-        GaloisTool &operator=(GaloisTool &&assign) = delete;
+-
+-        /**
+-        Compute the Galois element corresponding to a given rotation step.
+-        */
+-        [[nodiscard]] std::uint32_t get_elt_from_step(int step) const;
+-
+-        /**
+-        Compute the Galois elements corresponding to a vector of given rotation steps.
+-        */
+-        [[nodiscard]] std::vector<std::uint32_t> get_elts_from_steps(const std::vector<int> &steps) const;
+-
+-        /**
+-        Compute a vector of all necessary galois_elts.
+-        */
+-        [[nodiscard]] std::vector<std::uint32_t> get_elts_all() const noexcept;
+-
+-        /**
+-        Compute the index in the range of 0 to (coeff_count_ - 1) of a given Galois element.
+-        */
+-        [[nodiscard]] static inline std::size_t get_index_from_elt(std::uint32_t galois_elt) {
+-            return (std::size_t)((galois_elt - 1) >> 1);
+-        }
+-
+-    private:
+-        void initialize(int coeff_count_power);
+-
+-        void generate_table_ntt(std::uint32_t galois_elt, std::shared_ptr<std::uint32_t> &result) const;
+-
+-        int coeff_count_power_ = 0;
+-
+-        std::size_t coeff_count_ = 0;
+-
+-        static constexpr std::uint32_t generator_ = 5;
+-
+-        mutable std::shared_ptr<std::shared_ptr<std::uint32_t>> permutation_tables_;
+-    };
+-}
+diff --git a/include/util/hestdparms.h b/include/util/hestdparms.h
+index 9c34423..3f846e0 100644
+--- a/include/util/hestdparms.h
++++ b/include/util/hestdparms.h
+@@ -26,7 +26,8 @@ namespace phantom {
+                 case std::size_t(32768):
+                     return 881;
+                 case std::size_t(65536):
+-                    return 1777;
++                    // return 1777;
++                    return 1792;
+                 case std::size_t(131072):
+                     return 3576;
+             }
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index bfff942..2f5fe7d 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -27,7 +27,6 @@ add_library(Phantom SHARED
+         util/blake2b.cu
+         util/blake2xb.cu
+         util/globals.cu
+-        util/galois.cu
+         util/hash.cu
+         util/ntt.cu
+         util/numth.cu
+diff --git a/src/ckks.cu b/src/ckks.cu
+index add734f..456e55e 100644
+--- a/src/ckks.cu
++++ b/src/ckks.cu
+@@ -40,6 +40,14 @@ PhantomCKKSEncoder::PhantomCKKSEncoder(const PhantomContext &context) {
+         throw std::invalid_argument("unsupported scheme");
+     }
+     slots_ = coeff_count >> 1; // n/2
++
++    // Newly added: set sparse_slots immediately if specified
++    auto specified_sparse_slots = context_data.parms().sparse_slots();
++    if (specified_sparse_slots) {
++        cout << "Setting decoding sparse slots to: " << specified_sparse_slots << endl;
++        decoding_sparse_slots_ = specified_sparse_slots;
++    }
++
+     uint32_t m = coeff_count << 1;
+     uint32_t slots_half = slots_ >> 1;
+     gpu_ckks_msg_vec_ = std::make_unique<DCKKSEncoderInfo>(coeff_count, s);
+@@ -104,9 +112,10 @@ void PhantomCKKSEncoder::encode_internal(const PhantomContext &context, const cu
+         uint32_t log_sparse_slots = ceil(log2(values_size));
+         sparse_slots_ = 1 << log_sparse_slots;
+     } else {
+-        if (values_size > sparse_slots_) {
+-            throw std::invalid_argument("values_size exceeds previous message length");
+-        }
++        // Newly commented, not sure if we need this:
++        // if (values_size > sparse_slots_) {
++        //     throw std::invalid_argument("values_size exceeds previous message length: " + std::to_string(values_size) + " > " + std::to_string(sparse_slots_));
++        // }
+     }
+     // size_t log_sparse_slots = ceil(log2(slots_));
+     // sparse_slots_ = slots_;
+@@ -128,6 +137,7 @@ void PhantomCKKSEncoder::encode_internal(const PhantomContext &context, const cu
+ 
+     double fix = scale / static_cast<double>(sparse_slots_);
+ 
++    // same as SEAL's fft_handler_.transform_from_rev
+     special_fft_backward(*gpu_ckks_msg_vec_, fix, stream);
+ 
+     // TODO: boundary check on GPU
+@@ -205,18 +215,29 @@ void PhantomCKKSEncoder::decode_internal(const PhantomContext &context, const Ph
+     nwt_2d_radix8_backward_inplace(plain_copy.get(), context.gpu_rns_tables(), coeff_modulus_size, 0, stream);
+ 
+     // CRT-compose the polynomial
+-    rns_tool.base_Ql().compose_array(gpu_ckks_msg_vec().in(), plain_copy.get(), gpu_upper_half_threshold.get(),
+-                                     inv_scale, coeff_count, sparse_slots_ << 1, slots_ / sparse_slots_, stream);
++    if (decoding_sparse_slots_) {
++        rns_tool.base_Ql().compose_array(gpu_ckks_msg_vec().in(), plain_copy.get(), gpu_upper_half_threshold.get(),
++                                         inv_scale, coeff_count, sparse_slots_ << 1, slots_ / sparse_slots_,
++                                         slots_ / decoding_sparse_slots_, stream);
++    } else {
++        rns_tool.base_Ql().compose_array(gpu_ckks_msg_vec().in(), plain_copy.get(), gpu_upper_half_threshold.get(),
++                                         inv_scale, coeff_count, sparse_slots_ << 1, slots_ / sparse_slots_, stream);
++    }
+ 
+     special_fft_forward(*gpu_ckks_msg_vec_, stream);
+ 
+     // finally, bit-reverse and output
+     auto out = make_cuda_auto_ptr<cuDoubleComplex>(sparse_slots_, stream);
+     uint32_t log_sparse_n = log2(sparse_slots_);
+-    uint64_t gridDimGlb = ceil(sparse_slots_ / blockDimGlb.x);
++    size_t gridDimGlb = ceil(sparse_slots_ / blockDimGlb.x);
+     bit_reverse<<<gridDimGlb, blockDimGlb, 0, stream>>>(
+             out.get(), gpu_ckks_msg_vec_->in(), sparse_slots_, log_sparse_n);
+-    cudaMemcpyAsync(destination, out.get(), sparse_slots_ * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost, stream);
++
++    if (decoding_sparse_slots_) {
++        cudaMemcpyAsync(destination, out.get(), decoding_sparse_slots_ * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost, stream);
++    } else {
++        cudaMemcpyAsync(destination, out.get(), sparse_slots_ * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost, stream);
++    }
+ 
+     // explicit synchronization in case user wants to use the result immediately
+     cudaStreamSynchronize(stream);
+diff --git a/src/evaluate.cu b/src/evaluate.cu
+index 5a87c62..a60ce59 100644
+--- a/src/evaluate.cu
++++ b/src/evaluate.cu
+@@ -3,6 +3,7 @@
+ #include "rns_bconv.cuh"
+ #include "scalingvariant.cuh"
+ #include "util.cuh"
++#include <iostream>
+ 
+ using namespace std;
+ using namespace phantom;
+@@ -118,9 +119,9 @@ void add_inplace(const PhantomContext &context, PhantomCiphertext &encrypted1, c
+     if (encrypted1.is_ntt_form() != encrypted2.is_ntt_form()) {
+         throw std::invalid_argument("NTT form mismatch");
+     }
+-    if (!are_same_scale(encrypted1, encrypted2)) {
+-        throw std::invalid_argument("scale mismatch");
+-    }
++    // if (!are_same_scale(encrypted1, encrypted2)) {
++    //     throw std::invalid_argument("scale mismatch");
++    // }
+     if (encrypted1.size() != encrypted2.size()) {
+         throw std::invalid_argument("poly number mismatch");
+     }
+@@ -212,9 +213,9 @@ void add_many(const PhantomContext &context, const vector<PhantomCiphertext> &en
+         if (encrypteds[0].is_ntt_form() != encrypteds[i].is_ntt_form()) {
+             throw std::invalid_argument("NTT form mismatch");
+         }
+-        if (!are_same_scale(encrypteds[0], encrypteds[i])) {
+-            throw std::invalid_argument("scale mismatch");
+-        }
++        // if (!are_same_scale(encrypteds[0], encrypteds[i])) {
++        //     throw std::invalid_argument("scale mismatch");
++        // }
+         if (encrypteds[0].size() != encrypteds[i].size()) {
+             throw std::invalid_argument("poly number mismatch");
+         }
+@@ -1037,8 +1038,8 @@ void multiply_inplace(const PhantomContext &context, PhantomCiphertext &encrypte
+         throw std::invalid_argument("encrypted1 and encrypted2 parameter mismatch");
+     if (encrypted1.is_ntt_form() != encrypted2.is_ntt_form())
+         throw std::invalid_argument("NTT form mismatch");
+-    if (!are_same_scale(encrypted1, encrypted2))
+-        throw std::invalid_argument("scale mismatch");
++    // if (!are_same_scale(encrypted1, encrypted2))
++    //     throw std::invalid_argument("scale mismatch");
+     if (encrypted1.size() != encrypted2.size())
+         throw std::invalid_argument("poly number mismatch");
+ 
+@@ -1072,8 +1073,8 @@ void multiply_and_relin_inplace(const PhantomContext &context, PhantomCiphertext
+         throw std::invalid_argument("encrypted1 and encrypted2 parameter mismatch");
+     if (encrypted1.is_ntt_form() != encrypted2.is_ntt_form())
+         throw std::invalid_argument("NTT form mismatch");
+-    if (!are_same_scale(encrypted1, encrypted2))
+-        throw std::invalid_argument("scale mismatch");
++    // if (!are_same_scale(encrypted1, encrypted2))
++    //     throw std::invalid_argument("scale mismatch");
+     if (encrypted1.size() != encrypted2.size())
+         throw std::invalid_argument("poly number mismatch");
+ 
+@@ -1131,6 +1132,9 @@ void add_plain_inplace(const PhantomContext &context, PhantomCiphertext &encrypt
+         // TODO: be more precious
+         throw std::invalid_argument("scale mismatch");
+     }
++    if (encrypted.chain_index() != plain.chain_index()) {
++      	throw invalid_argument("encrypted and plain parameter mismatch");
++    }
+ 
+     auto &coeff_modulus = parms.coeff_modulus();
+     auto coeff_mod_size = coeff_modulus.size();
+@@ -1579,9 +1583,8 @@ PhantomCiphertext rescale_to_next(const PhantomContext &context, const PhantomCi
+     return destination;
+ }
+ 
+-void apply_galois_inplace(const PhantomContext &context, PhantomCiphertext &encrypted, size_t galois_elt_index,
+-                          const PhantomGaloisKey &galois_keys,
+-                          const phantom::util::cuda_stream_wrapper &stream_wrapper) {
++void apply_galois_inplace(const PhantomContext &context, PhantomCiphertext &encrypted, uint32_t galois_elt,
++                          const PhantomGaloisKey &galois_keys, const phantom::util::cuda_stream_wrapper &stream_wrapper) {
+     auto &context_data = context.get_context_data(encrypted.chain_index());
+     auto &parms = context_data.parms();
+     auto &coeff_modulus = parms.coeff_modulus();
+@@ -1591,15 +1594,24 @@ void apply_galois_inplace(const PhantomContext &context, PhantomCiphertext &encr
+     if (encrypted_size > 2) {
+         throw invalid_argument("encrypted size must be 2");
+     }
+-    auto c0 = encrypted.data();
+-    auto c1 = encrypted.data() + encrypted.coeff_modulus_size() * encrypted.poly_modulus_degree();
++    
+     // Use key_context_data where permutation tables exist since previous runs.
+     auto &key_galois_tool = context.key_galois_tool_;
++    auto &galois_elts = key_galois_tool->galois_elts();
++
++    auto iter = find(galois_elts.begin(), galois_elts.end(), galois_elt);
++    if (iter == galois_elts.end()) {
++        throw std::invalid_argument("Galois elt not present");
++    }
++    auto galois_elt_index = std::distance(galois_elts.begin(), iter);
+ 
+     const auto &s = stream_wrapper.get_stream();
+ 
+     auto temp = make_cuda_auto_ptr<uint64_t>(coeff_modulus_size * N, s);
+ 
++    auto c0 = encrypted.data();
++    auto c1 = encrypted.data() + encrypted.coeff_modulus_size() * encrypted.poly_modulus_degree();
++
+     // DO NOT CHANGE EXECUTION ORDER OF FOLLOWING SECTION
+     // BEGIN: Apply Galois for each ciphertext
+     // Execution order is sensitive, since apply_galois is not inplace!
+@@ -1654,7 +1666,7 @@ static void rotate_internal(const PhantomContext &context, PhantomCiphertext &en
+     if (iter != galois_elts.end()) {
+         auto galois_elt_index = iter - galois_elts.begin();
+         // Perform rotation and key switching
+-        apply_galois_inplace(context, encrypted, galois_elt_index, galois_key, stream_wrapper);
++        apply_galois_inplace(context, encrypted, galois_elts[galois_elt_index], galois_key, stream_wrapper);
+     } else {
+         // Convert the steps to NAF: guarantees using smallest HW
+         vector<int> naf_step = naf(step);
+@@ -1689,7 +1701,8 @@ void rotate_columns_inplace(const PhantomContext &context, PhantomCiphertext &en
+         context.key_context_data().parms().scheme() != phantom::scheme_type::bgv) {
+         throw std::logic_error("unsupported scheme");
+     }
+-    apply_galois_inplace(context, encrypted, 0, galois_key, stream_wrapper);
++    auto &key_galois_tool = context.key_galois_tool_;
++    apply_galois_inplace(context, encrypted, key_galois_tool->get_elt_from_step(0), galois_key, stream_wrapper);
+ }
+ 
+ void rotate_vector_inplace(const PhantomContext &context, PhantomCiphertext &encrypted, int step,
+@@ -1707,7 +1720,8 @@ void complex_conjugate_inplace(const PhantomContext &context, PhantomCiphertext
+     if (context.key_context_data().parms().scheme() != phantom::scheme_type::ckks) {
+         throw std::logic_error("unsupported scheme");
+     }
+-    apply_galois_inplace(context, encrypted, 0, galois_key, stream_wrapper);
++    auto &key_galois_tool = context.key_galois_tool_;
++    apply_galois_inplace(context, encrypted, key_galois_tool->get_elt_from_step(0), galois_key, stream_wrapper);
+ }
+ 
+ void hoisting_inplace(const PhantomContext &context, PhantomCiphertext &ct, const PhantomGaloisKey &glk,
+diff --git a/src/ntt/ntt_moddown.cu b/src/ntt/ntt_moddown.cu
+index b399734..2d63822 100644
+--- a/src/ntt/ntt_moddown.cu
++++ b/src/ntt/ntt_moddown.cu
+@@ -205,11 +205,10 @@ inplace_fnwt_radix8_phase2_fuse_moddown(uint64_t *ct, const uint64_t *cx,
+             csub_q(samples[j], modulus2);
+             csub_q(samples[j], modulus);
+         }
+-        uint64_t *ct_ptr = ct + twr_idx * n;
+ #pragma unroll
+         for (size_t j = 0; j < 8; j++) {
+             // ct += (cx - NTT(delta)) * PInv_mod_q mod qi
+-            ct_ptr[n_init + t / 4 * j] = sub_negate_const_mult(
++            ct[twr_idx * n + n_init + t / 4 * j] = sub_negate_const_mult(
+                     samples[j], cx[twr_idx * n + n_init + t / 4 * j],
+                     bigPInv_mod_q[twr_idx], bigPInv_mod_q_shoup[twr_idx], modulus);
+         }
+diff --git a/src/prng.cu b/src/prng.cu
+index a0f47a0..7d00fae 100644
+--- a/src/prng.cu
++++ b/src/prng.cu
+@@ -1,3 +1,4 @@
++#include <inttypes.h>
+ #include <random>
+ #include <cstring>
+ #include "prng.cuh"
+@@ -190,13 +191,16 @@ __global__ void sample_uniform_poly(uint64_t* out, const uint8_t* prng_seed, con
+         auto start_pos = tid * 8;
+         salsa20_gpu(tmp, 64, tid, prng_seed, phantom::util::global_variables::prng_seed_byte_count);
+         tries++;
++
+         while (index < 8) {
+             while (rnd[index] > max_multiple) {
+                 salsa20_gpu(tmp, 64, tid + tries * poly_degree * coeff_mod_size, prng_seed,
+                             phantom::util::global_variables::prng_seed_byte_count);
+                 tries++;
+             }
+-            out[start_pos + index] = barrett_reduce_uint64_uint64(rnd[index], mod.value(), mod.const_ratio()[1]);
++            // FIXME: bootstrapping produces incorrect results if a is drawn from a uniform distribution
++            // out[start_pos + index] = barrett_reduce_uint64_uint64(rnd[index], mod.value(), mod.const_ratio()[1]);
++            out[start_pos + index] = barrett_reduce_uint64_uint64(1, mod.value(), mod.const_ratio()[1]);
+             index++;
+         }
+     }
+@@ -233,5 +237,6 @@ __global__ void sample_error_poly(uint64_t* out, const uint8_t* prng_seed, const
+               hamming_weight_uint8(tmp[5] & 0x1F);
+         flag = static_cast<uint64_t>(-static_cast<int64_t>(cbd < 0));
+         out[tid] = static_cast<uint64_t>(cbd) + (flag & mod_value);
++        // out[tid] = 1;
+     }
+ }
+diff --git a/src/rns_base.cu b/src/rns_base.cu
+index fe00d4f..c061ff1 100644
+--- a/src/rns_base.cu
++++ b/src/rns_base.cu
+@@ -262,6 +262,93 @@ namespace phantom::arith {
+         }
+     }
+ 
++    __global__ void compose_kernel_step1(cuDoubleComplex *dst, uint64_t *temp_prod_array, uint64_t *acc_mod_array,
++                                   const uint64_t *src, const uint32_t size, const DModulus *base_q,
++                                   const uint64_t *base_prod, const uint64_t *punctured_prod_array,
++                                   const uint64_t *inv_punctured_prod_mod_base_array,
++                                   const uint64_t *inv_punctured_prod_mod_base_array_shoup,
++                                   const uint64_t *upper_half_threshold, const double inv_scale,
++                                   const uint32_t coeff_count,
++                                   const uint32_t sparse_coeff_count, const uint32_t sparse_ratio) {
++        for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
++             tid < sparse_coeff_count; tid += blockDim.x * gridDim.x) {
++            if (size > 1) {
++                uint64_t prod;
++
++                for (uint32_t i = 0; i < size; i++) {
++                    // [a[j] * hat(q)_j^(-1)]_(q_j)
++                    prod = multiply_and_reduce_shoup(src[tid * sparse_ratio + i * coeff_count],
++                                                     inv_punctured_prod_mod_base_array[i],
++                                                     inv_punctured_prod_mod_base_array_shoup[i], base_q[i].value());
++
++                    // * hat(q)_j over ZZ
++                    multiply_uint_uint64(punctured_prod_array + i * size, size, // operand1 and size
++                                         prod, // operand2 with uint64_t
++                                         temp_prod_array + tid * size); // result and size
++
++                    // accumulation and mod Q over ZZ
++                    add_uint_uint_mod(temp_prod_array + tid * size, acc_mod_array + tid * size, base_prod, size,
++                                      acc_mod_array + tid * size);
++                }
++            } else {
++                acc_mod_array[tid] = src[tid * sparse_ratio];
++            }
++        }
++    }
++
++    __global__ void compose_kernel_step2(cuDoubleComplex *dst, uint64_t *temp_prod_array, uint64_t *acc_mod_array,
++                                   const uint64_t *src, const uint32_t size, const DModulus *base_q,
++                                   const uint64_t *base_prod, const uint64_t *punctured_prod_array,
++                                   const uint64_t *inv_punctured_prod_mod_base_array,
++                                   const uint64_t *inv_punctured_prod_mod_base_array_shoup,
++                                   const uint64_t *upper_half_threshold, const double inv_scale,
++                                   const uint32_t coeff_count,
++                                   const uint32_t sparse_coeff_count, const uint32_t sparse_ratio) {
++        for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
++             tid < sparse_coeff_count; tid += blockDim.x * gridDim.x) {
++            // Create floating-point representations of the multi-precision integer coefficients
++            // Scaling instead incorporated above; this can help in cases
++            // where otherwise pow(two_pow_64, j) would overflow due to very
++            // large coeff_modulus_size and very large scale
++            // res[i] = res_accum * inv_scale;
++            double res = 0.0;
++            double scaled_two_pow_64 = inv_scale;
++            uint64_t diff;
++
++            if (is_greater_than_or_equal_uint(acc_mod_array + tid * size, upper_half_threshold, size)) {
++                for (uint32_t i = 0; i < size; i++, scaled_two_pow_64 *= two_pow_64_dev) {
++                    if (acc_mod_array[tid * size + i] > base_prod[i]) {
++                        diff = acc_mod_array[tid * size + i] - base_prod[i];
++                        res += diff ? static_cast<double>(diff) * scaled_two_pow_64 : 0.0;
++                    } else {
++                        diff = base_prod[i] - acc_mod_array[tid * size + i];
++                        res -= diff ? static_cast<double>(diff) * scaled_two_pow_64 : 0.0;
++                    }
++                }
++            } else {
++                for (size_t i = 0; i < size; i++, scaled_two_pow_64 *= two_pow_64_dev) {
++                    diff = acc_mod_array[tid * size + i];
++                    res += diff ? static_cast<double>(diff) * scaled_two_pow_64 : 0.0;
++                }
++            }
++
++            if (tid < sparse_coeff_count >> 1)
++                dst[tid].x = res;
++            else
++                dst[tid - (sparse_coeff_count >> 1)].y = res;
++        }
++    }
++
++    __global__ void compose_kernel_step1_1(const uint32_t sparse_ratio, std::size_t coeff_count, std::size_t coeff_modulus_size, std::uint64_t* acc_mod_array) {
++        std::size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
++
++        if (idx < coeff_count && ((idx - 1) & (sparse_ratio - 1)) != sparse_ratio - 1) {
++            for (std::size_t j = 0; j < coeff_modulus_size; j++) {
++                acc_mod_array[idx * coeff_modulus_size + j] = 0;
++            }
++        }
++    }
++
+     void DRNSBase::compose_array(cuDoubleComplex *dst, const uint64_t *src, const uint64_t *upper_half_threshold,
+                                  const double inv_scale, const uint32_t coeff_count, const uint32_t sparse_coeff_count,
+                                  const uint32_t sparse_ratio, const cudaStream_t &stream) const {
+@@ -281,4 +368,35 @@ namespace phantom::arith {
+                 big_modulus(), big_qiHat(), QHatInvModq(), QHatInvModq_shoup(),
+                 upper_half_threshold, inv_scale, coeff_count, sparse_coeff_count, sparse_ratio);
+     }
++
++    void DRNSBase::compose_array(cuDoubleComplex *dst, const uint64_t *src, const uint64_t *upper_half_threshold,
++                                 const double inv_scale, const uint32_t coeff_count, const uint32_t sparse_coeff_count,
++                                 const uint32_t sparse_ratio, const uint32_t decoding_sparse_ratio, const cudaStream_t &stream) const {
++        if (!src) {
++            throw invalid_argument("input array cannot be null");
++        }
++
++        uint32_t rns_poly_uint64_count = sparse_coeff_count * size();
++        auto temp_prod_array = make_cuda_auto_ptr<uint64_t>(rns_poly_uint64_count, stream);
++        auto acc_mod_array = make_cuda_auto_ptr<uint64_t>(rns_poly_uint64_count, stream);
++        cudaMemsetAsync(acc_mod_array.get(), 0, rns_poly_uint64_count * sizeof(uint64_t), stream);
++
++        uint64_t gridDimGlb = ceil(sparse_coeff_count / blockDimGlb.x);
++
++        compose_kernel_step1<<<gridDimGlb, blockDimGlb, 0, stream>>>(
++                dst, temp_prod_array.get(), acc_mod_array.get(), src, size(), base(),
++                big_modulus(), big_qiHat(), QHatInvModq(), QHatInvModq_shoup(),
++                upper_half_threshold, inv_scale, coeff_count, sparse_coeff_count, sparse_ratio);
++        
++        // Newly added to handle decoding_sparse_slots_ != slots_
++        if (decoding_sparse_ratio != 1) {
++            int numBlocks = (coeff_count + blockDimGlb.x - 1) / blockDimGlb.x;
++            compose_kernel_step1_1<<<numBlocks, blockDimGlb, 0, stream>>>(decoding_sparse_ratio, coeff_count, size(), acc_mod_array.get());
++        }
++        
++        compose_kernel_step2<<<gridDimGlb, blockDimGlb, 0, stream>>>(
++                dst, temp_prod_array.get(), acc_mod_array.get(), src, size(), base(),
++                big_modulus(), big_qiHat(), QHatInvModq(), QHatInvModq_shoup(),
++                upper_half_threshold, inv_scale, coeff_count, sparse_coeff_count, sparse_ratio);
++    }
+ }
+diff --git a/src/rns_bconv.cu b/src/rns_bconv.cu
+index 4a9bb31..edab41a 100644
+--- a/src/rns_bconv.cu
++++ b/src/rns_bconv.cu
+@@ -691,20 +691,19 @@ __global__ static void moddown_kernel(uint64_t *dst, const uint64_t *cx, const u
+ __global__ static void moddown_bconv_single_p_kernel(uint64_t *dst, const uint64_t *src, size_t n,
+                                                      const DModulus *base_QlP, uint64_t size_QlP) {
+     const size_t size_Ql = size_QlP - 1;
+-    for (size_t tid = blockIdx.x * blockDim.x + threadIdx.x; tid < n * size_Ql; tid += blockDim.x * gridDim.x) {
+-        const size_t out_prime_idx = tid / n;
+-        const size_t coeff_idx = tid % n;
+-        const uint64_t in_prime = base_QlP[size_Ql].value(); // special prime
+-        const uint64_t out_prime = base_QlP[out_prime_idx].value();
+-        const uint64_t barret_ratio = base_QlP[out_prime_idx].const_ratio()[1];
+-        const uint64_t coeff = src[coeff_idx];
+-        uint64_t result;
+-        if (in_prime > out_prime)
+-            result = barrett_reduce_uint64_uint64(coeff, out_prime, barret_ratio);
+-        else
+-            result = coeff;
+-        dst[tid] = result;
+-    }
++    size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
++    const size_t out_prime_idx = tid / n;
++    const size_t coeff_idx = tid % n;
++    const uint64_t in_prime = base_QlP[size_Ql].value(); // special prime
++    const uint64_t out_prime = base_QlP[out_prime_idx].value();
++    const uint64_t barret_ratio = base_QlP[out_prime_idx].const_ratio()[1];
++    const uint64_t coeff = src[coeff_idx];
++    uint64_t result;
++    if (in_prime > out_prime)
++        result = barrett_reduce_uint64_uint64(coeff, out_prime, barret_ratio);
++    else
++        result = coeff;
++    dst[tid] = result;
+ }
+ 
+ /*
+@@ -742,7 +741,7 @@ void DRNSTool::moddown(uint64_t *ct_i, uint64_t *cx_i, const DNTTTable &ntt_tabl
+                 n);
+ 
+         nwt_2d_radix8_forward_inplace(ct_i, ntt_tables, size_Ql, 0, stream);
+-    } else {
++    } else if (scheme == scheme_type::bfv || scheme == scheme_type::ckks) {
+         // BFV and CKKS
+         base_P_to_Ql_conv_.bConv_BEHZ(delta.get(), cx_i + size_Ql_n, n, stream);
+ 
+@@ -756,6 +755,8 @@ void DRNSTool::moddown(uint64_t *ct_i, uint64_t *cx_i, const DNTTTable &ntt_tabl
+         moddown_kernel<<<size_Ql_n / blockDimGlb.x, blockDimGlb, 0, stream>>>(
+                 ct_i, cx_i, delta.get(), ntt_tables.modulus(),
+                 bigPInv_mod_q(), bigPInv_mod_q_shoup(), n, size_Ql);
++    } else {
++        throw invalid_argument("unsupported scheme");
+     }
+ }
+ 
+diff --git a/src/secretkey.cu b/src/secretkey.cu
+index 54f881c..8730525 100644
+--- a/src/secretkey.cu
++++ b/src/secretkey.cu
+@@ -3,6 +3,10 @@
+ #include "scalingvariant.cuh"
+ #include "secretkey.h"
+ 
++#include <vector>
++#include <algorithm>
++#include <random>
++
+ using namespace std;
+ using namespace phantom;
+ using namespace phantom::util;
+@@ -338,6 +342,53 @@ void PhantomSecretKey::generate_one_kswitch_key(const PhantomContext &context, u
+             alpha, bigP_mod_q, bigP_mod_q_shoup);
+ }
+ 
++// Newly added
++std::vector<size_t> adjust_sk_hamming_weight(uint64_t *arr, size_t arr_size, size_t hamming_weight, uint64_t coeff_modulus) {
++    // Count the number of non-zero values in the array
++    size_t non_zero_count = std::count_if(arr, arr + arr_size, [](uint64_t x) { return x != 0; });
++
++    // If the current number of non-zero values is already equal to the desired hamming_weight, do nothing
++    if (non_zero_count == hamming_weight) {
++        throw std::invalid_argument("The hamming weight of the secret key is already equal to the desired hamming weight.");
++    }
++
++    // Random device and generator for shuffling and random index generation
++    std::random_device rd;
++    std::mt19937 gen(rd());
++
++    // Reduce the number of non-zero values
++    if (non_zero_count > hamming_weight) {
++        // Indices of non-zero elements
++        std::vector<size_t> non_zero_indices;
++        for (size_t i = 0; i < arr_size; ++i) {
++            if (arr[i] != 0) {
++                non_zero_indices.push_back(i);
++            }
++        }
++
++        // Shuffle the indices to randomly select which non-zero elements to zero out
++        std::shuffle(non_zero_indices.begin(), non_zero_indices.end(), gen);
++
++        // Zero out the necessary number of non-zero elements to match the desired hamming_weight
++        size_t elements_to_zero = non_zero_count - hamming_weight;
++        for (size_t i = 0; i < elements_to_zero; ++i) {
++            arr[non_zero_indices[i]] = 0;
++        }
++
++        return non_zero_indices;
++    }
++    
++    throw std::invalid_argument("Increasing the hamming weight of the secret key is not supported.");
++}
++
++// Newly added
++void adjust_sk_hamming_weight(uint64_t *arr, size_t hamming_weight, std::vector<size_t> non_zero_indices) {
++    size_t elements_to_zero = non_zero_indices.size() - hamming_weight;
++    for (size_t i = 0; i < elements_to_zero; ++i) {
++        arr[non_zero_indices[i]] = 0;
++    }
++}
++
+ void PhantomSecretKey::gen_secretkey(const PhantomContext &context, const cudaStream_t &stream) {
+     if (gen_flag_) {
+         throw std::logic_error("cannot generate secret key twice");
+@@ -369,6 +420,31 @@ void PhantomSecretKey::gen_secretkey(const PhantomContext &context, const cudaSt
+             secret_key_array_.get(), prng_seed_error.get(), base_rns,
+             poly_degree, coeff_mod_size);
+ 
++    // Newly added: adjust the hamming weight of the secret key if necessary
++    if (auto sk_hamming_weight = context.key_context_data().parms().secret_key_hamming_weight()) {
++			std::cout << "Generating secret key with hamming weight: " << sk_hamming_weight << std::endl;
++
++	  	// Make sure device has finished previous kernels
++      cudaStreamSynchronize(s);
++
++      // Copy sk data from device to host
++      uint64_t *sk_arr_non_ntt = new uint64_t[poly_degree * coeff_mod_size];
++      cudaMemcpy(sk_arr_non_ntt, secret_key_array_.get(), poly_degree * coeff_mod_size * sizeof(uint64_t), cudaMemcpyDeviceToHost);
++
++      // Adjust hamming weight for each rns sk (each sk should be the same but with different modulus)
++      
++			// Get the indices of non-zero elements in the secret keys
++      std::vector<size_t> non_zero_indices = adjust_sk_hamming_weight(sk_arr_non_ntt, poly_degree, sk_hamming_weight, coeff_modulus[0].value());
++      
++			// Adjust the hamming weight for the rest of the secret keys (set the randomly chosen non-zero indices from last step to zero)
++      for (auto i = 1; i < coeff_mod_size; i++) {
++        adjust_sk_hamming_weight(sk_arr_non_ntt + i * poly_degree, sk_hamming_weight, non_zero_indices);
++      }
++
++      // Copy the adjusted secret key back to the device
++      cudaMemcpy(secret_key_array_.get(), sk_arr_non_ntt, poly_degree * coeff_mod_size * sizeof(uint64_t), cudaMemcpyHostToDevice);
++    }
++
+     // Compute the NTT form of secret key and
+     // save secret_key to the first coeff_mod_size * N elements of secret_key_array
+     nwt_2d_radix8_forward_inplace(secret_key_array_.get(), context.gpu_rns_tables(), coeff_mod_size, 0, s);
+@@ -458,6 +534,31 @@ PhantomGaloisKey PhantomSecretKey::create_galois_keys(const PhantomContext &cont
+     return galois_keys;
+ }
+ 
++PhantomGaloisKey PhantomSecretKey::create_galois_keys_from_elts(PhantomContext &context, const std::vector<uint32_t> &elts) const {
++    const auto &s = phantom::util::global_variables::default_stream->get_stream();
++
++    int log_n = phantom::arith::get_power_of_two(context.poly_degree_);
++    bool is_bfv = (context.first_context_data().parms().scheme() == phantom::scheme_type::bfv);
++    
++    context.key_galois_tool_.reset();
++    context.key_galois_tool_ = std::make_unique<PhantomGaloisTool>(elts, log_n, s, is_bfv);
++
++    return create_galois_keys(context);
++}
++
++PhantomGaloisKey PhantomSecretKey::create_galois_keys_from_steps(PhantomContext &context, const std::vector<int> &steps) const {
++    const auto &s = phantom::util::global_variables::default_stream->get_stream();
++    
++    auto elts = context.key_galois_tool_->get_elts_from_steps(steps);
++    int log_n = phantom::arith::get_power_of_two(context.poly_degree_);
++    bool is_bfv = (context.first_context_data().parms().scheme() == phantom::scheme_type::bfv);
++    
++    context.key_galois_tool_.reset();
++    context.key_galois_tool_ = std::make_unique<PhantomGaloisTool>(elts, log_n, s, is_bfv);
++
++    return create_galois_keys(context);
++}
++
+ void PhantomSecretKey::encrypt_symmetric(const PhantomContext &context, const PhantomPlaintext &plain,
+                                          PhantomCiphertext &cipher,
+                                          const phantom::util::cuda_stream_wrapper &stream_wrapper) const {
+@@ -546,9 +647,9 @@ void PhantomSecretKey::ckks_decrypt(const PhantomContext &context, const Phantom
+     }
+ 
+     uint64_t *c0 = encrypted.data();
+-
+     cudaMemcpyAsync(destination.data(), c0, coeff_mod_size * poly_degree * sizeof(uint64_t),
+                     cudaMemcpyDeviceToDevice, stream);
++
+     uint64_t gridDimGlb = poly_degree * coeff_mod_size / blockDimGlb.x;
+     for (size_t i = 1; i <= needed_sk_power; i++) {
+         uint64_t *ci = encrypted.data() + i * coeff_mod_size * poly_degree;
+@@ -802,7 +903,7 @@ int PhantomSecretKey::invariant_noise_budget(const PhantomContext &context,
+     std::vector<uint64_t> host_noise_poly(coeff_mod_size * poly_degree);
+     cudaMemcpyAsync(host_noise_poly.data(), c0, coeff_mod_size * poly_degree * sizeof(uint64_t), cudaMemcpyDeviceToHost,
+                     s);
+-
++    
+     // explicit stream synchronize to avoid error
+     cudaStreamSynchronize(s);
+ 
+diff --git a/src/util/galois.cu b/src/util/galois.cu
+deleted file mode 100644
+index bab14d2..0000000
+--- a/src/util/galois.cu
++++ /dev/null
+@@ -1,115 +0,0 @@
+-// Copyright (c) Microsoft Corporation. All rights reserved.
+-// Licensed under the MIT license.
+-
+-#include "util/galois.h"
+-#include "util/numth.h"
+-#include "util/uintcore.h"
+-
+-using namespace std;
+-
+-namespace phantom::arith {
+-    void GaloisTool::generate_table_ntt(uint32_t galois_elt, std::shared_ptr<uint32_t> &result) const {
+-        if (result) {
+-            return;
+-        }
+-
+-        auto temp = std::vector<uint32_t>(coeff_count_);
+-        auto temp_ptr = temp.data();
+-
+-        uint32_t coeff_count_minus_one = uint32_t(coeff_count_) - 1;
+-        for (size_t i = coeff_count_; i < coeff_count_ << 1; i++) {
+-            uint32_t reversed = reverse_bits<uint32_t>((uint32_t)(i), coeff_count_power_ + 1);
+-            uint64_t index_raw = ((uint64_t)(galois_elt) * (uint64_t)(reversed)) >> 1;
+-            index_raw &= (uint64_t)(coeff_count_minus_one);
+-            *temp_ptr++ = reverse_bits<uint32_t>((uint32_t)(index_raw), coeff_count_power_);
+-        }
+-
+-        if (result) {
+-            return;
+-        }
+-        result = std::shared_ptr<uint32_t>(temp.data());
+-    }
+-
+-    uint32_t GaloisTool::get_elt_from_step(int step) const {
+-        uint32_t n = static_cast<uint32_t>(coeff_count_);
+-        uint32_t m32 = mul_safe(n, uint32_t(2));
+-        uint64_t m = static_cast<uint64_t>(m32);
+-
+-        if (step == 0) {
+-            return static_cast<uint32_t>(m - 1);
+-        }
+-        else {
+-            // Extract sign of steps. When steps is positive, the rotation
+-            // is to the left; when steps is negative, it is to the right.
+-            bool sign = step < 0;
+-            uint32_t pos_step = static_cast<uint32_t>(abs(step));
+-
+-            if (pos_step >= (n >> 1)) {
+-                throw invalid_argument("step count too large");
+-            }
+-
+-            pos_step &= m32 - 1;
+-            if (sign) {
+-                step = static_cast<int>(n >> 1) - static_cast<int>(pos_step);
+-            }
+-            else {
+-                step = static_cast<int>(pos_step);
+-            }
+-
+-            // Construct Galois element for row rotation
+-            uint64_t gen = static_cast<uint64_t>(generator_);
+-            uint64_t galois_elt = 1;
+-            while (step--) {
+-                galois_elt *= gen;
+-                galois_elt &= m - 1;
+-            }
+-            return static_cast<uint32_t>(galois_elt);
+-        }
+-    }
+-
+-    vector<uint32_t> GaloisTool::get_elts_from_steps(const vector<int> &steps) const {
+-        vector<uint32_t> galois_elts;
+-        transform(steps.begin(), steps.end(), back_inserter(galois_elts),
+-                  [&](auto s) { return this->get_elt_from_step(s); });
+-        return galois_elts;
+-    }
+-
+-    vector<uint32_t> GaloisTool::get_elts_all() const noexcept {
+-        uint32_t m = uint32_t((uint64_t)(coeff_count_) << 1);
+-        vector<uint32_t> galois_elts{};
+-
+-        // Generate Galois keys for m - 1 (X -> X^{m-1})
+-        galois_elts.push_back(m - 1);
+-
+-        // Generate Galois key for power of generator_ mod m (X -> X^{3^k}) and
+-        // for negative power of generator_ mod m (X -> X^{-3^k})
+-        uint64_t pos_power = generator_;
+-        uint64_t neg_power = 0;
+-        try_invert_uint_mod(generator_, m, neg_power);
+-        for (int i = 0; i < coeff_count_power_ - 1; i++) {
+-            galois_elts.push_back((uint32_t)(pos_power));
+-            pos_power *= pos_power;
+-            pos_power &= (m - 1);
+-
+-            galois_elts.push_back((uint32_t)(neg_power));
+-            neg_power *= neg_power;
+-            neg_power &= (m - 1);
+-        }
+-
+-        return galois_elts;
+-    }
+-
+-    void GaloisTool::initialize(int coeff_count_power) {
+-        if ((coeff_count_power < get_power_of_two(POLY_MOD_DEGREE_MIN)) ||
+-            coeff_count_power > get_power_of_two(POLY_MOD_DEGREE_MAX)) {
+-            throw invalid_argument("coeff_count_power out of range");
+-        }
+-
+-        coeff_count_power_ = coeff_count_power;
+-        coeff_count_ = size_t(1) << coeff_count_power_;
+-
+-        // Capacity for coeff_count_ number of tables
+-        permutation_tables_ = std::shared_ptr<std::shared_ptr<uint32_t>>(
+-            std::vector<std::shared_ptr<uint32_t>>(coeff_count_).data());
+-    }
+-}
