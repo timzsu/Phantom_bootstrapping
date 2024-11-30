@@ -28,7 +28,7 @@ void examples_ckks_bootstrapping() {
   long logN = 15;  // 16 -> 15
   long loge = 10;
 
-  long logn = 15;  // 16 -> 15
+  long logn = 13;  // 14 -> 13
   long sparse_slots = (1 << logn);
 
   int logp = 46;
