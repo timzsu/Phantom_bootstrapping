@@ -25,7 +25,7 @@ void examples_ckks_bootstrapping() {
   long inverse_deg = 1;
 
   // The following parameters have been adjusted to satisfy the memory constraints of an A100 GPU
-  long logN = 15;  // 16 -> 15
+  long logN = 14;  // 16 -> 15
   long loge = 10;
 
   long logn = 13;  // 14 -> 13
