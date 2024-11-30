@@ -1,7 +1,6 @@
 #include <random>
 
 #include "bootstrapping/Bootstrapper.cuh"
-#include "phantom.h"
 #include "example.h"
 
 using namespace std;
@@ -29,7 +28,7 @@ void examples_ckks_bootstrapping() {
   long logN = 15;  // 16 -> 15
   long loge = 10;
 
-  long logn = 13;  // 14 -> 13
+  long logn = 15;  // 16 -> 15
   long sparse_slots = (1 << logn);
 
   int logp = 46;
@@ -70,7 +69,7 @@ void examples_ckks_bootstrapping() {
 
   auto encoder = std::make_shared<PhantomCKKSEncoder>(*context);
 
-  CKKSEvaluator ckks_evaluator(context, public_key, secret_key, encoder, relin_keys, galois_keys, scale);
+  auto ckks_evaluator = std::make_shared<CKKSEvaluator>(context, public_key, secret_key, encoder, relin_keys, galois_keys, scale);
 
   size_t slot_count = encoder->slot_count();
 
@@ -84,7 +83,7 @@ void examples_ckks_bootstrapping() {
       deg,
       scale_factor,
       inverse_deg,
-      &ckks_evaluator);
+      ckks_evaluator);
 
   std::cout << "Generating Optimal Minimax Polynomials..." << endl;
   bootstrapper.prepare_mod_polynomial();
@@ -97,7 +96,7 @@ void examples_ckks_bootstrapping() {
   }
   bootstrapper.addLeftRotKeys_Linear_to_vector_3(gal_steps_vector);
 
-  ckks_evaluator.decryptor.create_galois_keys_from_steps(gal_steps_vector, *(ckks_evaluator.galois_keys));
+  ckks_evaluator->decryptor.create_galois_keys_from_steps(gal_steps_vector, *(ckks_evaluator->galois_keys));
   std::cout << "Galois key generated from steps vector." << endl;
 
   bootstrapper.slot_vec.push_back(logn);
@@ -120,17 +119,17 @@ void examples_ckks_bootstrapping() {
     input[i] = sparse[i % sparse_slots];
   }
 
-  ckks_evaluator.encoder.encode(input, scale, plain);
-  ckks_evaluator.encryptor.encrypt(plain, cipher);
+  ckks_evaluator->encoder.encode(input, scale, plain);
+  ckks_evaluator->encryptor.encrypt(plain, cipher);
 
   // Mod switch to the lowest level
   for (int i = 0; i < total_level; i++) {
-    ckks_evaluator.evaluator.mod_switch_to_next_inplace(cipher);
+    ckks_evaluator->evaluator.mod_switch_to_next_inplace(cipher);
   }
 
   // Decrypt input cipher to obtain the original input
-  ckks_evaluator.decryptor.decrypt(cipher, plain);
-  ckks_evaluator.encoder.decode(plain, before);
+  ckks_evaluator->decryptor.decrypt(cipher, plain);
+  ckks_evaluator->encoder.decode(plain, before);
 
   auto start = system_clock::now();
 
@@ -141,8 +140,8 @@ void examples_ckks_bootstrapping() {
   std::cout << "Bootstrapping took: " << sec.count() << "s" << endl;
   std::cout << "Return cipher level: " << rtn.coeff_modulus_size() << endl;
 
-  ckks_evaluator.decryptor.decrypt(rtn, plain);
-  ckks_evaluator.encoder.decode(plain, after);
+  ckks_evaluator->decryptor.decrypt(rtn, plain);
+  ckks_evaluator->encoder.decode(plain, after);
 
   double mean_err = 0;
   for (long i = 0; i < sparse_slots; i++) {

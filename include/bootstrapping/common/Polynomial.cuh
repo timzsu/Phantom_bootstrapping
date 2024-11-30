@@ -52,7 +52,7 @@ class Polynomial {
   void write_heap_to_file(ofstream &out);
   void read_heap_from_file(ifstream &in);
 
-  void homomorphic_poly_evaluation(CKKSEvaluator *ckks, PhantomCiphertext &rtn, PhantomCiphertext &cipher);
+  void homomorphic_poly_evaluation(std::shared_ptr<CKKSEvaluator> ckks, PhantomCiphertext &rtn, PhantomCiphertext &cipher);
 };
 
 void mul(Polynomial &rtn, Polynomial &a, Polynomial &b);

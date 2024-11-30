@@ -133,6 +133,10 @@ class Evaluator {
     ::mod_switch_to_inplace(*context, ct, chain_index);
   }
 
+  inline void mod_switch_to_next_inplace(PhantomPlaintext &pt) {
+    ::mod_switch_to_next_inplace(*context, pt);
+  }
+
   inline void mod_switch_to_inplace(PhantomPlaintext &pt, size_t chain_index) {
     ::mod_switch_to_inplace(*context, pt, chain_index);
   }

@@ -10,7 +10,7 @@ Bootstrapper::Bootstrapper(
     long _sin_cos_deg,
     long _scale_factor,
     long _inverse_deg,
-    CKKSEvaluator *_ckks)
+    std::shared_ptr<CKKSEvaluator> _ckks)
     : loge(_loge), logn(_logn), logNh(_logNh), L(_L), final_scale(_final_scale), boundary_K(_boundary_K), sin_cos_deg(_sin_cos_deg), scale_factor(_scale_factor), inverse_deg(_inverse_deg), ckks(_ckks) {
   n = 1 << logn;
   Nh = 1 << logNh;

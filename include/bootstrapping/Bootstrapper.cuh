@@ -30,7 +30,7 @@ class Bootstrapper {
   long scale_factor;
   long inverse_deg;
 
-  CKKSEvaluator *ckks = nullptr;
+  std::shared_ptr<CKKSEvaluator> ckks;
 
   vector<long> slot_vec;
   long slot_index = 0;
@@ -52,7 +52,7 @@ class Bootstrapper {
       long _sin_cos_deg,
       long _scale_factor,
       long _inverse_deg,
-      CKKSEvaluator *ckks);
+      std::shared_ptr<CKKSEvaluator> ckks);
 
   inline void set_final_scale(double _final_scale) {
     final_scale = _final_scale;

@@ -250,7 +250,7 @@ void Polynomial::read_heap_from_file(ifstream &in) {
   copy(*poly_heap[0]);
 }
 
-void Polynomial::homomorphic_poly_evaluation(CKKSEvaluator *ckks, PhantomCiphertext &rtn, PhantomCiphertext &cipher) {
+void Polynomial::homomorphic_poly_evaluation(std::shared_ptr<CKKSEvaluator> ckks, PhantomCiphertext &rtn, PhantomCiphertext &cipher) {
   double zero = 1.0 / cipher.scale();
 
   if (deg == 1) {
