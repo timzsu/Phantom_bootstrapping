@@ -1,5 +1,8 @@
 #include "common/func.cuh"
 
+using namespace std;
+using namespace NTL;
+
 RR fracpart(RR x) {
   return x - round(x);
 }

@@ -10,3 +10,9 @@ add_executable(example_context
 
 target_link_libraries(example_context PRIVATE Phantom PhantomBootstrapping)
 target_include_directories(example_context PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+add_executable(example_serialization
+  serialization.cu
+)
+target_link_libraries(example_serialization PRIVATE Phantom)
+target_include_directories(example_serialization PUBLIC ${CMAKE_SOURCE_DIR}/src)

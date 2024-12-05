@@ -1,5 +1,8 @@
 #include "ModularReducer.cuh"
 
+using namespace std;
+using namespace NTL;
+
 ModularReducer::ModularReducer(long _boundary_K, double _log_width, long _deg, long _num_double_formula, long _inverse_deg,
                                std::shared_ptr<CKKSEvaluator> _ckks) : boundary_K(_boundary_K), log_width(_log_width), deg(_deg), num_double_formula(_num_double_formula), inverse_deg(_inverse_deg), ckks(_ckks) {
   inverse_log_width = -log2(sin(2 * M_PI * pow(2.0, -log_width)));

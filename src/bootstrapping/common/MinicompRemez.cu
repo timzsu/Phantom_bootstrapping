@@ -1,5 +1,8 @@
 #include "common/MinicompRemez.cuh"
 
+using namespace std;
+using namespace NTL;
+
 namespace minicomp {
 Remez::Remez(RR (*_func)(RR), size_t _inter_num, vector<RR> _inter_start, vector<RR> _inter_end, RR _sc, long _prec, long _deg, long _iter, int _type, RR _scale, bool _is_opt_sampling) {
   sc = _sc;

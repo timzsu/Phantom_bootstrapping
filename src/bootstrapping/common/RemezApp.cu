@@ -1,5 +1,8 @@
 #include "common/RemezApp.cuh"
 
+using namespace std;
+using namespace NTL;
+
 RR GetError(int d, RR t, bool is_first_function, int type, RR scale) {
   Remez *rm;
   RR maxerr;
