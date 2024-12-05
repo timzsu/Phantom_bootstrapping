@@ -505,7 +505,8 @@ void example_bfv_encrypt_decrypt() {
         batchEncoder.encode(context, pod_matrix, plain_matrix);
 
         secret_key.encrypt_symmetric(context, plain_matrix, cipher);
-
+        auto noise_budget = secret_key.invariant_noise_budget(context, cipher);
+        cout << "cipher noise budget is: " << noise_budget << endl;
         PhantomPlaintext plain;
 
         secret_key.decrypt(context, cipher, plain);
@@ -557,7 +558,8 @@ void example_bfv_encrypt_decrypt_asym() {
         batchEncoder.encode(context, pod_matrix, plain_matrix);
 
         public_key.encrypt_asymmetric(context, plain_matrix, cipher);
-
+        auto noise_budget = secret_key.invariant_noise_budget(context, cipher);
+        cout << "cipher noise budget is: " << noise_budget << endl;
         PhantomPlaintext plain;
         secret_key.decrypt(context, cipher, plain);
 
@@ -1066,7 +1068,7 @@ void example_bfv_rotate_column() {
         PhantomGaloisKey galois_key = secret_key.create_galois_keys(context);
         batchEncoder.encode(context, pod_matrix, plain_matrix);
         secret_key.encrypt_symmetric(context, plain_matrix, sym_cipher);
-        rotate_inplace(context, sym_cipher, 0, galois_key);
+        rotate_columns_inplace(context, sym_cipher, galois_key);
         secret_key.decrypt(context, sym_cipher, dec_plain);
         batchEncoder.decode(context, dec_plain, dec_res);
 
@@ -1080,7 +1082,7 @@ void example_bfv_rotate_column() {
 
         PhantomPublicKey public_key = secret_key.gen_publickey(context);
         public_key.encrypt_asymmetric(context, plain_matrix, asym_cipher);
-        rotate_inplace(context, asym_cipher, 0, galois_key);
+        rotate_columns_inplace(context, asym_cipher, galois_key);
         secret_key.decrypt(context, asym_cipher, dec_asym_plain);
 
         batchEncoder.decode(context, dec_asym_plain, dec_res);
@@ -1125,7 +1127,7 @@ void example_bfv_rotate_row() {
         PhantomGaloisKey galois_key = secret_key.create_galois_keys(context);
         batchEncoder.encode(context, pod_matrix, plain_matrix);
         secret_key.encrypt_symmetric(context, plain_matrix, sym_cipher);
-        rotate_inplace(context, sym_cipher, step, galois_key);
+        rotate_rows_inplace(context, sym_cipher, step, galois_key);
         secret_key.decrypt(context, sym_cipher, dec_plain);
         batchEncoder.decode(context, dec_plain, dec_res);
 
@@ -1141,7 +1143,7 @@ void example_bfv_rotate_row() {
 
         PhantomPublicKey public_key = secret_key.gen_publickey(context);
         public_key.encrypt_asymmetric(context, plain_matrix, asym_cipher);
-        rotate_inplace(context, asym_cipher, step, galois_key);
+        rotate_rows_inplace(context, asym_cipher, step, galois_key);
         secret_key.decrypt(context, asym_cipher, dec_asym_plain);
         batchEncoder.decode(context, dec_asym_plain, dec_res);
 
@@ -1155,6 +1157,22 @@ void example_bfv_rotate_row() {
             throw std::logic_error("Error in rotate row asymmetric");
     }
 }
+
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <iostream>
+#include <mutex>
+#include <random>
+#include <vector>
+
+#include "example.h"
+#include "phantom.h"
+#include "util.cuh"
+
+using namespace std;
+using namespace phantom;
+using namespace phantom::arith;
 
 void example_bfv_encrypt_decrypt_hps() {
     std::cout << std::endl
@@ -1187,7 +1205,8 @@ void example_bfv_encrypt_decrypt_hps() {
     batchEncoder.encode(context, pod_matrix, plain_matrix);
 
     secret_key.encrypt_symmetric(context, plain_matrix, cipher);
-
+    auto noise_budget = secret_key.invariant_noise_budget(context, cipher);
+    cout << "cipher noise budget is: " << noise_budget << endl;
     PhantomCiphertext cipher_copy(cipher);
     PhantomPlaintext plain;
 
@@ -1252,7 +1271,8 @@ void example_bfv_encrypt_decrypt_hps_asym() {
     batchEncoder.encode(context, pod_matrix, plain_matrix);
 
     public_key.encrypt_asymmetric(context, plain_matrix, cipher);
-
+    auto noise_budget = secret_key.invariant_noise_budget(context, cipher);
+    cout << "cipher noise budget is: " << noise_budget << endl;
     PhantomPlaintext plain;
     secret_key.decrypt(context, cipher, plain);
 
@@ -1391,21 +1411,13 @@ void bfv_multiply_correctness(mul_tech_type mul_tech) {
     PhantomPublicKey public_key = secret_key.gen_publickey(context);
     public_key.encrypt_asymmetric(context, plain_matrix, asym_cipher);
     PhantomCiphertext asym_cipher_copy(asym_cipher);
-    cout << "Initial noise budget: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
     multiply_and_relin_inplace(context, asym_cipher_copy, asym_cipher, relin_keys);
-    cout << "Noise budget after mult&relin: " << secret_key.invariant_noise_budget(context, asym_cipher_copy) << endl;
 
     secret_key.decrypt(context, asym_cipher_copy, dec_asym_plain);
 
@@ -1486,7 +1498,7 @@ bfv_multiply_bench(mul_tech_type mul_tech, size_t poly_modulus_degree, const std
     PhantomCiphertext sym_cipher_copy(sym_cipher);
 
     for (size_t mult_depth = 0; mult_depth < max_mult_depth; mult_depth++) {
-        CUDATimer timer("mult&relin");
+        CUDATimer timer("mult&relin", *global_variables::default_stream);
         for (size_t idx = 0; idx < n_tests; idx++) {
             PhantomCiphertext sym_cipher_copy2(sym_cipher_copy);
             timer.start();
@@ -1496,7 +1508,7 @@ bfv_multiply_bench(mul_tech_type mul_tech, size_t poly_modulus_degree, const std
         multiply_and_relin_inplace(context, sym_cipher_copy, sym_cipher, relin_keys);
     }
 
-    CUDATimer timer_dec("decrypt");
+    CUDATimer timer_dec("decrypt", *global_variables::default_stream);
     for (size_t idx = 0; idx < n_tests; idx++) {
         timer_dec.start();
         secret_key.decrypt(context, sym_cipher_copy, dec_plain);

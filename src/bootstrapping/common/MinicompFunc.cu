@@ -1,8 +1,5 @@
 #include "common/MinicompFunc.cuh"
 
-using namespace std;
-using namespace NTL;
-
 namespace minicomp {
 // [0, q-1) -> (-q/2,q/2]
 ZZ mod(ZZ a, ZZ q) {

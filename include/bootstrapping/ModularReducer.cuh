@@ -9,6 +9,8 @@
 #include "RemezCos.cuh"
 #include "common/Polynomial.cuh"
 
+using namespace std;
+
 class ModularReducer {
  public:
   long boundary_K;
