@@ -8,5 +8,5 @@
 
 using namespace minicomp;
 
-NTL::RR GetError(int d, NTL::RR t, bool is_first_function, int type, NTL::RR scale);
-NTL::RR GetErrorCoeff(int d, NTL::RR t, std::vector<NTL::RR> &coeff, bool is_first_function, int type, NTL::RR scale);
+RR GetError(int d, RR t, bool is_first_function, int type, RR scale);
+RR GetErrorCoeff(int d, RR t, vector<RR> &coeff, bool is_first_function, int type, RR scale);

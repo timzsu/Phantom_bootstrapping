@@ -1,8 +1,5 @@
 #include "common/Choosemax.cuh"
 
-using namespace std;
-using namespace NTL;
-
 /**************************************************
  * find the index of minimum among c[0] ~ c[num-1]
  *************************************************/

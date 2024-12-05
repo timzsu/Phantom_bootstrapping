@@ -4,9 +4,6 @@
 
 #include "common/PolyUpdate.cuh"
 
-using namespace std;
-using namespace NTL;
-
 namespace minicomp {
 // n : odd
 Tree::Tree() {
