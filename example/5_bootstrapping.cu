@@ -3,7 +3,7 @@
 #include "bootstrapping/Bootstrapper.cuh"
 #include "example.h"
 
-using namespace std;
+using namespace std::chrono;
 using namespace phantom;
 
 void random_real(vector<double> &vec, size_t size) {
@@ -31,11 +31,11 @@ void examples_ckks_bootstrapping() {
   long logn = 15;  // 14 -> 13
   long sparse_slots = (1 << logn);
 
-  int logp = 46;
+  int logp = 50;
   int logq = 51;
   int log_special_prime = 51;
 
-  int secret_key_hamming_weight = 192;
+  int secret_key_hamming_weight = 0;
 
   int remaining_level = 16;
   int boot_level = 14;  // >= subsum 1 + coefftoslot 2 + ModReduction 9 + slottocoeff 2
@@ -58,8 +58,6 @@ void examples_ckks_bootstrapping() {
 
   parms.set_poly_modulus_degree(poly_modulus_degree);
   parms.set_coeff_modulus(phantom::arith::CoeffModulus::Create(poly_modulus_degree, coeff_bit_vec));
-  parms.set_secret_key_hamming_weight(secret_key_hamming_weight);
-  parms.set_sparse_slots(sparse_slots);
 
   auto context = std::make_shared<PhantomContext>(parms);
   auto secret_key = std::make_shared<PhantomSecretKey>(*context);

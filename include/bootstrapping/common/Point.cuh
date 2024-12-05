@@ -3,16 +3,13 @@
 
 #include <iostream>
 
-using namespace std;
-using namespace NTL;
-
 class Point {
  public:
-  RR x;
-  RR y;
+  NTL::RR x;
+  NTL::RR y;
 
   long locmm;
 
   Point() = default;
-  Point(RR _x, RR _y);
+  Point(NTL::RR _x, NTL::RR _y);
 };

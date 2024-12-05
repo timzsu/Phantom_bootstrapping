@@ -10,8 +10,6 @@
 
 #include "MinicompFunc.cuh"
 
-using namespace std;
-using namespace NTL;
 using namespace minicomp;
 
 enum class evaltype : int {
@@ -30,7 +28,7 @@ class Tree {
  public:
   int depth;
   evaltype type;
-  vector<int> tree;
+  std::vector<int> tree;
   int m;
   int l;
   int b;
@@ -46,30 +44,30 @@ class Tree {
 
 class Polynomial {
  public:
-  vector<RR> coeff;
+  std::vector<NTL::RR> coeff;
   long deg;
-  vector<RR> chebcoeff;
+  std::vector<NTL::RR> chebcoeff;
 
   Polynomial();
   Polynomial(long _deg);
-  Polynomial(long _deg, vector<RR> _coeff, string tag);
-  Polynomial(long _deg, RR *_coeff, string tag);
+  Polynomial(long _deg, std::vector<NTL::RR> _coeff, std::string tag);
+  Polynomial(long _deg, NTL::RR *_coeff, std::string tag);
 
-  void get_coeff(vector<RR> &_coeff);
+  void get_coeff(std::vector<NTL::RR> &_coeff);
   void showcoeff();
   void showchebcoeff();
   void chebround(Polynomial &poly, long n);
   void copy(Polynomial poly);
   void power_to_cheb();
   void cheb_to_power();
-  void power_to_cheb_scale(RR scale);
-  void cheb_to_power_scale(RR scale);
-  RR evaluate(RR input);
-  RR evaluate_cheb(RR input);
+  void power_to_cheb_scale(NTL::RR scale);
+  void cheb_to_power_scale(NTL::RR scale);
+  NTL::RR evaluate(NTL::RR input);
+  NTL::RR evaluate_cheb(NTL::RR input);
 };
 
 void mul(Polynomial &rtn, Polynomial &a, Polynomial &b);
-void mul(Polynomial &rtn, Polynomial &a, RR b);
+void mul(Polynomial &rtn, Polynomial &a, NTL::RR b);
 void add(Polynomial &rtn, Polynomial &a, Polynomial &b);
 void subt(Polynomial &rtn, Polynomial &a, Polynomial &b);
 
@@ -79,14 +77,14 @@ void subtinplace(Polynomial &a, Polynomial &b);
 
 void divide_poly(Polynomial &quotient, Polynomial &remainder, Polynomial &target, Polynomial &divider);
 void chebyshev(Polynomial &rtn, long deg);
-void chebyshev_scale(Polynomial &rtn, long deg, RR scale);
+void chebyshev_scale(Polynomial &rtn, long deg, NTL::RR scale);
 
-void power_to_cheb_int(Polynomial &q, int type, RR scale);
-void cheb_to_power_int(Polynomial &qround, int type, RR scale);
-void eval_divide(Polynomial &pround, Polynomial &qround, Polynomial &rround, Polynomial &Ti, int type, RR scale);
-void geneTi(Polynomial &Ti, int deg, int type, RR scale);
+void power_to_cheb_int(Polynomial &q, int type, NTL::RR scale);
+void cheb_to_power_int(Polynomial &qround, int type, NTL::RR scale);
+void eval_divide(Polynomial &pround, Polynomial &qround, Polynomial &rround, Polynomial &Ti, int type, NTL::RR scale);
+void geneTi(Polynomial &Ti, int deg, int type, NTL::RR scale);
 
-// void poly_decompose_integrate(int deg, int type, RR scale, vector<RR> &coeff, Tree& tree, ofstream &out, evaltype eval);
+// void poly_decompose_integrate(int deg, int type, NTL::RR scale, std::vector<NTL::RR> &coeff, Tree& tree, ofstream &out, evaltype eval);
 /**
 @param[in] deg The degree of root polynomial to evaluate
 @param[in] input_type The input type. 0: power basis, 1: Cheb basis, 2: scaled Cheb basis
@@ -98,7 +96,7 @@ void geneTi(Polynomial &Ti, int deg, int type, RR scale);
 @param[in] output_scale The output scale K.
 @param[in] out_decomp_coeff The tree-decomposed coefficients are stored in this ofstream.
 */
-void poly_decompose_integrate(int deg, int input_type, RR input_scale, vector<RR> &coeff, Tree &tree, evaltype eval_type, int output_type, RR output_scale, ofstream &out_decomp_coeff);
-void print_text_chebcoeff(ofstream &out, Polynomial &q);
+void poly_decompose_integrate(int deg, int input_type, NTL::RR input_scale, std::vector<NTL::RR> &coeff, Tree &tree, evaltype eval_type, int output_type, NTL::RR output_scale, std::ofstream &out_decomp_coeff);
+void print_text_chebcoeff(std::ofstream &out, Polynomial &q);
 
 }  // namespace minicomp

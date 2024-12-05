@@ -6,11 +6,9 @@
 #include "phantom.h"
 
 namespace nexus {
-using namespace std;
-using namespace phantom;
 
-inline vector<cuDoubleComplex> pack_complex(vector<complex<double>>& values) {
-  vector<cuDoubleComplex> cu_complex_values(values.size());
+inline std::vector<cuDoubleComplex> pack_complex(std::vector<std::complex<double>>& values) {
+  std::vector<cuDoubleComplex> cu_complex_values(values.size());
   for (size_t i = 0; i < values.size(); i++) {
     cu_complex_values[i] = make_cuDoubleComplex(values[i].real(), values[i].imag());
   }
@@ -33,7 +31,7 @@ class Encoder {
 
 
   // Vector (of doubles or complexes) inputs
-  inline void encode(vector<double> values, size_t chain_index, double scale, PhantomPlaintext &plain) {
+  inline void encode(std::vector<double> values, size_t chain_index, double scale, PhantomPlaintext &plain) {
     if (values.size() == 1) {
       encode(values[0], chain_index, scale, plain);
       return;
@@ -42,7 +40,7 @@ class Encoder {
     encoder->encode(*context, values, scale, plain, chain_index);
   }
 
-  inline void encode(vector<double> values, double scale, PhantomPlaintext &plain) {
+  inline void encode(std::vector<double> values, double scale, PhantomPlaintext &plain) {
     if (values.size() == 1) {
       encode(values[0], scale, plain);
       return;
@@ -51,34 +49,42 @@ class Encoder {
     encoder->encode(*context, values, scale, plain);
   }
 
-  inline void encode(vector<complex<double>> complex_values, double scale, PhantomPlaintext &plain) {
+  inline void encode(std::vector<std::complex<double>> complex_values, double scale, PhantomPlaintext &plain) {
     if (complex_values.size() == 1) {
       encode(complex_values[0], scale, plain);
       return;
     }
-    complex_values.resize(encoder->slot_count(), 0.0 + 0.0i);
+    complex_values.resize(encoder->slot_count(), 0.0);
     encoder->encode(*context, pack_complex(complex_values), scale, plain);
   }
 
   // Value inputs (fill all slots with that value)
   inline void encode(double value, size_t chain_index, double scale, PhantomPlaintext &plain) {
-    vector<double> values(encoder->slot_count(), value);
+    std::vector<double> values(encoder->slot_count(), value);
     encoder->encode(*context, values, scale, plain, chain_index);
   }
 
   inline void encode(double value, double scale, PhantomPlaintext &plain) {
-    vector<double> values(encoder->slot_count(), value);
+    std::vector<double> values(encoder->slot_count(), value);
     encoder->encode(*context, values, scale, plain);
   }
 
-  inline void encode(complex<double> complex_value, double scale, PhantomPlaintext &plain) {
-    vector<cuDoubleComplex> complex_values(encoder->slot_count(), make_cuDoubleComplex(complex_value.real(), complex_value.imag()));
+  inline void encode(std::complex<double> complex_value, double scale, PhantomPlaintext &plain) {
+    std::vector<cuDoubleComplex> complex_values(encoder->slot_count(), make_cuDoubleComplex(complex_value.real(), complex_value.imag()));
     encoder->encode(*context, complex_values, scale, plain);
   }
 
-  template <typename T, typename = std::enable_if_t<std::is_same<std::remove_cv_t<T>, double>::value || std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
-  inline void decode(PhantomPlaintext &plain, vector<T> &values) {
+  template <typename T, typename = std::enable_if_t<std::is_same<std::remove_cv_t<T>, double>::value || std::is_same<std::remove_cv_t<T>, cuDoubleComplex>::value>>
+  inline void decode(PhantomPlaintext &plain, std::vector<T> &values) {
     encoder->decode(*context, plain, values);
+  }
+
+  inline void decode(PhantomPlaintext &plain, std::vector<std::complex<double>> &values) {
+    auto wrapper = std::vector<cuDoubleComplex>(values.size());
+    decode(plain, wrapper);
+    for (size_t i = 0; i < values.size(); i++) {
+      values[i] = std::complex<double>(cuCreal(wrapper[i]), cuCimag(wrapper[i]));
+    }
   }
 };
 
@@ -204,9 +210,9 @@ class Evaluator {
     phantom::add_inplace(*context, ct1, ct2);
   }
 
-  inline void add_many(vector<PhantomCiphertext> &cts, PhantomCiphertext &dest) {
+  inline void add_many(std::vector<PhantomCiphertext> &cts, PhantomCiphertext &dest) {
     size_t size = cts.size();
-    if (size < 2) throw invalid_argument("add_many requires at least 2 ciphertexts");
+    if (size < 2) throw std::invalid_argument("add_many requires at least 2 ciphertexts");
 
     add(cts[0], cts[1], dest);
     for (size_t i = 2; i < size; i++) {
@@ -326,9 +332,9 @@ class Evaluator {
   inline void multiply_const_inplace(PhantomCiphertext &ct, double value) {
     PhantomPlaintext const_plain;
 
-    vector<double> values(encoder->slot_count(), value);
+    std::vector<double> values(encoder->slot_count(), value);
     encoder->encode(*context, values, ct.scale(), const_plain);
-    mod_switch_to_inplace(const_plain, ct.params_id());
+    mod_switch_to_inplace(const_plain, ct.chain_index());
     multiply_plain_inplace(ct, const_plain);
   }
 
@@ -340,9 +346,9 @@ class Evaluator {
   inline void add_const_inplace(PhantomCiphertext &ct, double value) {
     PhantomPlaintext const_plain;
 
-    vector<double> values(encoder->slot_count(), value);
+    std::vector<double> values(encoder->slot_count(), value);
     encoder->encode(*context, values, ct.scale(), const_plain);
-    mod_switch_to_inplace(const_plain, ct.params_id());
+    mod_switch_to_inplace(const_plain, ct.chain_index());
     add_plain_inplace(ct, const_plain);
   }
 
@@ -385,21 +391,21 @@ class Evaluator {
     multiply_vector_inplace_reduced_error(dest, values);
   }
 
-  inline void multiply_vector_inplace_reduced_error(PhantomCiphertext &ct, vector<double> &values) {
+  inline void multiply_vector_inplace_reduced_error(PhantomCiphertext &ct, std::vector<double> &values) {
     PhantomPlaintext plain;
 
     values.resize(encoder->slot_count(), 0.0);
     encoder->encode(*context, values, ct.scale(), plain);
-    mod_switch_to_inplace(plain, ct.params_id());
+    mod_switch_to_inplace(plain, ct.chain_index());
     multiply_plain_inplace(ct, plain);
   }
 
-  inline void multiply_vector_inplace_reduced_error(PhantomCiphertext &ct, vector<complex<double>> &values) {
+  inline void multiply_vector_inplace_reduced_error(PhantomCiphertext &ct, std::vector<std::complex<double>> &values) {
     PhantomPlaintext plain;
 
-    values.resize(encoder->slot_count(), 0.0 + 0.0i);
+    values.resize(encoder->slot_count(), 0.0);
     encoder->encode(*context, pack_complex(values), ct.scale(), plain);
-    mod_switch_to_inplace(plain, ct.params_id());
+    mod_switch_to_inplace(plain, ct.chain_index());
     multiply_plain_inplace(ct, plain);
   }
 };
@@ -420,21 +426,30 @@ class Decryptor {
     decryptor->decrypt(*context, ct, plain);
   }
 
-  inline void create_galois_keys_from_steps(vector<int> &steps, PhantomGaloisKey &galois_keys) {
-    galois_keys = decryptor->create_galois_keys_from_steps(*context, steps);
+  inline void create_galois_keys_from_elts(std::vector<uint32_t> &elts, PhantomGaloisKey &galois_keys) {
+    const auto &s = cudaStreamPerThread;
+
+    int log_n = phantom::arith::get_power_of_two(context->poly_degree_);
+    bool is_bfv = (context->first_context_data().parms().scheme() == phantom::scheme_type::bfv);
+    
+    context->key_galois_tool_.reset();
+    context->key_galois_tool_ = std::make_unique<phantom::util::PhantomGaloisTool>(elts, log_n, s, is_bfv);
+
+    galois_keys = decryptor->create_galois_keys(*context);
   }
 
-  inline void create_galois_keys_from_elts(vector<uint32_t> &elts, PhantomGaloisKey &galois_keys) {
-    galois_keys = decryptor->create_galois_keys_from_elts(*context, elts);
+  inline void create_galois_keys_from_steps(std::vector<int> &steps, PhantomGaloisKey &galois_keys) {
+    auto elts = context->key_galois_tool_->get_elts_from_steps(steps);
+    create_galois_keys_from_elts(elts, galois_keys);
   }
 };
 
 class CKKSEvaluator {
  private:
   // Sign function coefficients
-  vector<double> F4_COEFFS = {0, 315, 0, -420, 0, 378, 0, -180, 0, 35};
+  std::vector<double> F4_COEFFS = {0, 315, 0, -420, 0, 378, 0, -180, 0, 35};
   int F4_SCALE = (1 << 7);
-  vector<double> G4_COEFFS = {0, 5850, 0, -34974, 0, 97015, 0, -113492, 0, 46623};
+  std::vector<double> G4_COEFFS = {0, 5850, 0, -34974, 0, 97015, 0, -113492, 0, 46623};
   int G4_SCALE = (1 << 10);
 
   // Helper functions
@@ -445,8 +460,8 @@ class CKKSEvaluator {
 
   // Evaluation functions
   PhantomCiphertext newton_iter(PhantomCiphertext x, PhantomCiphertext res, int iter);
-  pair<PhantomCiphertext, PhantomCiphertext> goldschmidt_iter(PhantomCiphertext v, PhantomCiphertext y, int d = 1);
-  void eval_odd_deg9_poly(vector<double> &a, PhantomCiphertext &x, PhantomCiphertext &dest);
+  std::pair<PhantomCiphertext, PhantomCiphertext> goldschmidt_iter(PhantomCiphertext v, PhantomCiphertext y, int d = 1);
+  void eval_odd_deg9_poly(std::vector<double> &a, PhantomCiphertext &x, PhantomCiphertext &dest);
 
  public:
   // Memory managed outside of the evaluator
@@ -473,7 +488,7 @@ class CKKSEvaluator {
     std::shared_ptr<PhantomRelinKey> relin_keys, 
     std::shared_ptr<PhantomGaloisKey> galois_keys,
     double scale, 
-    vector<uint32_t> galois_elts = {}
+    std::vector<uint32_t> galois_elts = {}
   ) {
     this->context = context;
     this->relin_keys = relin_keys;
@@ -499,7 +514,7 @@ class CKKSEvaluator {
   }
 
   // Helper functions
-  vector<double> init_vec_with_value(double value);
+  std::vector<double> init_vec_with_value(double value);
   PhantomPlaintext init_plain_power_of_x(size_t exponent);
 
   void re_encrypt(PhantomCiphertext &ct);
@@ -513,7 +528,7 @@ class CKKSEvaluator {
   PhantomCiphertext inverse(PhantomCiphertext x, int iter = 4);
 
   // Metrics calcuation functions
-  double calculate_MAE(vector<double> &y_true, PhantomCiphertext &ct, int N);
+  double calculate_MAE(std::vector<double> &y_true, PhantomCiphertext &ct, int N);
 };
 
 }  // namespace nexus

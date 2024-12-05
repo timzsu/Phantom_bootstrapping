@@ -2,6 +2,9 @@
 
 #include "common/Remez.cuh"
 
+using namespace std;
+using namespace NTL;
+
 namespace boot {
 Remez::Remez(RemezParam _params, long _boundary_K, double _log_width, long _deg)
     : params(_params), boundary_K(_boundary_K), log_width(_log_width), deg(_deg) {

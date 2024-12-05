@@ -1,5 +1,8 @@
 #include "common/Polynomial.cuh"
 
+using namespace std;
+using namespace NTL;
+
 namespace boot {
 Polynomial::Polynomial(long _deg) {
   deg = _deg;
