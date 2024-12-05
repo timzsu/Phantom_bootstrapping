@@ -15,6 +15,16 @@ using namespace phantom;
 using namespace phantom::arith;
 using namespace phantom::util;
 
+#define EPSINON 0.001
+
+inline bool operator==(const cuDoubleComplex &lhs, const cuDoubleComplex &rhs) {
+    return fabs(lhs.x - rhs.x) < EPSINON;
+}
+
+inline bool compare_double(const double &lhs, const double &rhs) {
+    return fabs(lhs - rhs) < EPSINON;
+}
+
 void example_ckks_enc(PhantomContext &context, const double &scale) {
     std::cout << "Example: CKKS Encode/Decode complex vector" << std::endl;
 
@@ -109,11 +119,7 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     PhantomCiphertext x_asymmetric_cipher;
     public_key.encrypt_asymmetric(context, x_plain, x_asymmetric_cipher);
     PhantomPlaintext x_asymmetric_plain;
-    // BECAREFUL FOR THE MULTIPLICATIVE LEVEL!!!
-    // cout << "We drop the ciphertext for some level, and Decrypting ......" << endl;
-    // mod_switch_to_inplace(context, x_asymmetric_cipher, 3);
     secret_key.decrypt(context, x_asymmetric_cipher, x_asymmetric_plain);
-
     encoder.decode(context, x_asymmetric_plain, result);
     cout << "Decode the decrypted plaintext." << endl;
     print_vector(result, 3, 7);
@@ -123,7 +129,6 @@ void example_ckks_enc(PhantomContext &context, const double &scale) {
     }
     if (!correctness)
         throw std::logic_error("Asymmetric encryption error");
-    result.clear();
 }
 
 void example_ckks_add(PhantomContext &context, const double &scale) {
@@ -413,7 +418,6 @@ void example_ckks_mul_plain(PhantomContext &context, const double &scale) {
     print_vector(const_vec, 3, 7);
 
     // reset the length of encoder
-    encoder.reset_sparse_slots();
     encoder.encode(context, msg_vec, scale, plain);
     encoder.encode(context, const_vec, scale, const_plain);
 
@@ -553,7 +557,7 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
     public_key.encrypt_asymmetric(context, x_plain, x_cipher);
 
     cout << "Compute, rot vector x." << endl;
-    rotate_vector_inplace(context, x_cipher, step, galois_keys);
+    rotate_inplace(context, x_cipher, step, galois_keys);
 
     secret_key.decrypt(context, x_cipher, x_rot_plain);
 
@@ -587,7 +591,7 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
     public_key.encrypt_asymmetric(context, x_plain, x_cipher);
 
     cout << "Compute, conjugate vector x." << endl;
-    complex_conjugate_inplace(context, x_cipher, galois_keys);
+    rotate_inplace(context, x_cipher, 0, galois_keys);
 
     secret_key.decrypt(context, x_cipher, x_conj_plain);
 
@@ -603,6 +607,43 @@ void example_ckks_rotation(PhantomContext &context, const double &scale) {
         throw std::logic_error("Homomorphic conjugate error");
     result.clear();
     x_msg.clear();
+}
+
+void example_ckks_small_param() {
+    EncryptionParameters parms(scheme_type::ckks);
+
+    size_t N = 1 << 13;
+    parms.set_poly_modulus_degree(N);
+    parms.set_special_modulus_size(1);
+    parms.set_coeff_modulus(CoeffModulus::Create(N, {60, 40, 60}));
+    parms.set_galois_elts({1});
+
+    PhantomContext context(parms);
+    PhantomCKKSEncoder encoder(context);
+
+    PhantomSecretKey secret_key(context);
+    PhantomPublicKey public_key = secret_key.gen_publickey(context);
+    PhantomRelinKey relin_key = secret_key.gen_relinkey(context);
+    PhantomGaloisKey galois_keys = secret_key.create_galois_keys(context);
+
+    vector<double> output;
+    vector<double> input(encoder.slot_count(), 1.0);
+    PhantomPlaintext plain;
+    PhantomCiphertext cipher;
+    encoder.encode(context, input, pow(2.0, 40), plain);
+    public_key.encrypt_asymmetric(context, plain, cipher);
+
+    apply_galois_inplace(context, cipher, 1, galois_keys);
+
+    secret_key.decrypt(context, cipher, plain);
+    encoder.decode(context, plain, output);
+
+    for (auto i = 0; i < 10; i++) {
+//        std::cout << output[i] << " ";
+        if (!compare_double(input[i], output[i]))
+            throw std::logic_error("error in example_ckks_small_param");
+    }
+    std::cout << std::endl;
 }
 
 void examples_ckks() {
@@ -718,5 +759,6 @@ void examples_ckks() {
         example_ckks_mul(context, scale);
         example_ckks_rotation(context, scale);
     }
-    cout << endl;
+
+    example_ckks_small_param();
 }

@@ -2823,7 +2823,7 @@ void Bootstrapper::modraise_inplace(PhantomCiphertext &cipher) {
     ckks->evaluator.transform_from_ntt_inplace(cipher);
   }
 
-  const auto &stream = phantom::util::global_variables::default_stream->get_stream();
+  const auto &stream = cudaStreamPerThread;
   auto N = cipher.poly_modulus_degree();
   const auto &context_data = ckks->context->first_context_data();
   const auto &modulus = context_data.parms().coeff_modulus();

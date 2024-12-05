@@ -1,6 +1,7 @@
 #pragma once
 
 #include <complex>
+#include <cuComplex.h>
 
 #include "phantom.h"
 
@@ -8,6 +9,13 @@ namespace nexus {
 using namespace std;
 using namespace phantom;
 
+inline vector<cuDoubleComplex> pack_complex(vector<complex<double>>& values) {
+  vector<cuDoubleComplex> cu_complex_values(values.size());
+  for (size_t i = 0; i < values.size(); i++) {
+    cu_complex_values[i] = make_cuDoubleComplex(values[i].real(), values[i].imag());
+  }
+  return cu_complex_values;
+}
 class Encoder {
  private:
   std::shared_ptr<PhantomContext> context;
@@ -23,7 +31,6 @@ class Encoder {
 
   inline size_t slot_count() { return encoder->slot_count(); }
 
-  inline void reset_sparse_slots() { encoder->reset_sparse_slots(); }
 
   // Vector (of doubles or complexes) inputs
   inline void encode(vector<double> values, size_t chain_index, double scale, PhantomPlaintext &plain) {
@@ -50,7 +57,7 @@ class Encoder {
       return;
     }
     complex_values.resize(encoder->slot_count(), 0.0 + 0.0i);
-    encoder->encode(*context, complex_values, scale, plain);
+    encoder->encode(*context, pack_complex(complex_values), scale, plain);
   }
 
   // Value inputs (fill all slots with that value)
@@ -65,7 +72,7 @@ class Encoder {
   }
 
   inline void encode(complex<double> complex_value, double scale, PhantomPlaintext &plain) {
-    vector<complex<double>> complex_values(encoder->slot_count(), complex_value);
+    vector<cuDoubleComplex> complex_values(encoder->slot_count(), make_cuDoubleComplex(complex_value.real(), complex_value.imag()));
     encoder->encode(*context, complex_values, scale, plain);
   }
 
@@ -126,28 +133,28 @@ class Evaluator {
 
   // Mod switch
   inline void mod_switch_to_next_inplace(PhantomCiphertext &ct) {
-    ::mod_switch_to_next_inplace(*context, ct);
+    phantom::mod_switch_to_next_inplace(*context, ct);
   }
 
   inline void mod_switch_to_inplace(PhantomCiphertext &ct, size_t chain_index) {
-    ::mod_switch_to_inplace(*context, ct, chain_index);
+    phantom::mod_switch_to_inplace(*context, ct, chain_index);
   }
 
   inline void mod_switch_to_next_inplace(PhantomPlaintext &pt) {
-    ::mod_switch_to_next_inplace(*context, pt);
+    phantom::mod_switch_to_next_inplace(*context, pt);
   }
 
   inline void mod_switch_to_inplace(PhantomPlaintext &pt, size_t chain_index) {
-    ::mod_switch_to_inplace(*context, pt, chain_index);
+    phantom::mod_switch_to_inplace(*context, pt, chain_index);
   }
 
   inline void rescale_to_next_inplace(PhantomCiphertext &ct) {
-    ::rescale_to_next_inplace(*context, ct);
+    phantom::rescale_to_next_inplace(*context, ct);
   }
 
   // Relinearization
   inline void relinearize_inplace(PhantomCiphertext &ct, const PhantomRelinKey &relin_keys) {
-    ::relinearize_inplace(*context, ct, relin_keys);
+    phantom::relinearize_inplace(*context, ct, relin_keys);
   }
 
   // Multiplication
@@ -169,32 +176,32 @@ class Evaluator {
   }
 
   inline void multiply_inplace(PhantomCiphertext &ct1, const PhantomCiphertext &ct2) {
-    ::multiply_inplace(*context, ct1, ct2);
+    phantom::multiply_inplace(*context, ct1, ct2);
   }
 
   inline void multiply_plain(PhantomCiphertext &ct, PhantomPlaintext &plain, PhantomCiphertext &dest) {
-    dest = ::multiply_plain(*context, ct, plain);
+    dest = phantom::multiply_plain(*context, ct, plain);
   }
 
   inline void multiply_plain_inplace(PhantomCiphertext &ct, PhantomPlaintext &plain) {
-    ::multiply_plain_inplace(*context, ct, plain);
+    phantom::multiply_plain_inplace(*context, ct, plain);
   }
 
   // Addition
   inline void add_plain(const PhantomCiphertext &ct, PhantomPlaintext &plain, PhantomCiphertext &dest) {
-    dest = ::add_plain(*context, ct, plain);
+    dest = phantom::add_plain(*context, ct, plain);
   }
 
   inline void add_plain_inplace(PhantomCiphertext &ct, PhantomPlaintext &plain) {
-    ::add_plain_inplace(*context, ct, plain);
+    phantom::add_plain_inplace(*context, ct, plain);
   }
 
   inline void add(PhantomCiphertext &ct1, const PhantomCiphertext &ct2, PhantomCiphertext &dest) {
-    dest = ::add(*context, ct1, ct2);
+    dest = phantom::add(*context, ct1, ct2);
   }
 
   inline void add_inplace(PhantomCiphertext &ct1, const PhantomCiphertext &ct2) {
-    ::add_inplace(*context, ct1, ct2);
+    phantom::add_inplace(*context, ct1, ct2);
   }
 
   inline void add_many(vector<PhantomCiphertext> &cts, PhantomCiphertext &dest) {
@@ -214,7 +221,7 @@ class Evaluator {
   }
 
   inline void sub_plain_inplace(PhantomCiphertext &ct, PhantomPlaintext &plain) {
-    ::sub_plain_inplace(*context, ct, plain);
+    phantom::sub_plain_inplace(*context, ct, plain);
   }
 
   inline void sub(PhantomCiphertext &ct1, const PhantomCiphertext &ct2, PhantomCiphertext &dest) {
@@ -228,17 +235,17 @@ class Evaluator {
   }
 
   inline void sub_inplace(PhantomCiphertext &ct1, const PhantomCiphertext &ct2) {
-    ::sub_inplace(*context, ct1, ct2);
+    phantom::sub_inplace(*context, ct1, ct2);
   }
 
   // Rotation
   inline void rotate_vector(PhantomCiphertext &ct, int steps, PhantomGaloisKey &galois_keys, PhantomCiphertext &dest) {
-    dest = ::rotate_vector(*context, ct, steps, galois_keys);
+    dest = phantom::rotate(*context, ct, steps, galois_keys);
     cudaStreamSynchronize(ct.data_ptr().get_stream());  // this is currently required, rotation is unstable
   }
 
   inline void rotate_vector_inplace(PhantomCiphertext &ct, int steps, PhantomGaloisKey &galois_keys) {
-    ::rotate_vector_inplace(*context, ct, steps, galois_keys);
+    phantom::rotate_inplace(*context, ct, steps, galois_keys);
     cudaStreamSynchronize(ct.data_ptr().get_stream());  // this is currently required, rotation is unstable
   }
 
@@ -249,17 +256,17 @@ class Evaluator {
   }
 
   inline void negate_inplace(PhantomCiphertext &ct) {
-    ::negate_inplace(*context, ct);
+    phantom::negate_inplace(*context, ct);
   }
 
   // Galois
   inline void apply_galois(PhantomCiphertext &ct, uint32_t elt, PhantomGaloisKey &galois_keys, PhantomCiphertext &dest) {
-    dest = ::apply_galois(*context, ct, elt, galois_keys);
+    dest = phantom::apply_galois(*context, ct, elt, galois_keys);
   }
 
   inline void apply_galois_inplace(PhantomCiphertext &ct, int step, PhantomGaloisKey &galois_keys) {
-    auto elt = context->key_galois_tool_->get_elt_from_step(step);
-    ::apply_galois_inplace(*context, ct, elt, galois_keys);
+    auto elt = context->key_galois_tool_->get_elts_from_steps({step})[0];
+    phantom::apply_galois_inplace(*context, ct, elt, galois_keys);
   }
 
   // Complex Conjugate
@@ -269,7 +276,7 @@ class Evaluator {
   }
 
   inline void complex_conjugate_inplace(PhantomCiphertext &ct, const PhantomGaloisKey &galois_keys) {
-    ::complex_conjugate_inplace(*context, ct, galois_keys);
+    phantom::rotate_inplace(*context, ct, 0, galois_keys);
   }
 
   // Matrix Multiplication
@@ -369,7 +376,7 @@ class Evaluator {
   void multiply_inplace_reduced_error(PhantomCiphertext &ct1, const PhantomCiphertext &ct2, const PhantomRelinKey &relin_keys);
 
   inline void double_inplace(PhantomCiphertext &ct) const {
-    ::add_inplace(*context, ct, ct);
+    phantom::add_inplace(*context, ct, ct);
   }
 
   template <typename T, typename = std::enable_if_t<std::is_same<std::remove_cv_t<T>, double>::value || std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
@@ -391,7 +398,7 @@ class Evaluator {
     PhantomPlaintext plain;
 
     values.resize(encoder->slot_count(), 0.0 + 0.0i);
-    encoder->encode(*context, values, ct.scale(), plain);
+    encoder->encode(*context, pack_complex(values), ct.scale(), plain);
     mod_switch_to_inplace(plain, ct.params_id());
     multiply_plain_inplace(ct, plain);
   }
