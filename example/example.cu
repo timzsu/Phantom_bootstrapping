@@ -45,6 +45,14 @@ int main(int argc, char *argv[]) {
             examples_ckks_bootstrapping();
             return 0;
         }
+        if (selection == 6) {
+            example_nn(0);
+            example_nn(1);
+            example_nn(2);
+            example_nn(3);
+            example_nn(4);
+            return 0;
+        }
         return 0;
     }
 

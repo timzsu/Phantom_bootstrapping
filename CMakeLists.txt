@@ -41,9 +41,9 @@ endif()
 
 # Language config
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # CUDA config
@@ -51,7 +51,7 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
   set(CMAKE_CUDA_ARCHITECTURES native) # auto-detect GPU
 endif()
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -std=c++17 --default-stream per-thread")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Print CUDA info
@@ -80,19 +80,23 @@ target_include_directories(Phantom PUBLIC
 )
 include_directories(${CMAKE_SOURCE_DIR}/extern/phantom-fhe/include)
 target_compile_options(Phantom PRIVATE "$<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-src-in-ptx>")
-target_compile_features(Phantom PUBLIC cxx_std_17 cuda_std_17)
+target_compile_features(Phantom PUBLIC cxx_std_20 cuda_std_20)
 
 # NexusCUDA Bootstrapping
 file(GLOB_RECURSE BOOTSTRAP_SRC CONFIGURE_DEPENDS "src/bootstrapping/*.cu")
+file(GLOB_RECURSE NN_SRC CONFIGURE_DEPENDS "src/nn/*.cu")
 add_library(PhantomBootstrapping SHARED 
   ${BOOTSTRAP_SRC} 
+  ${NN_SRC} 
   "src/ckks_evaluator.cu"
 )
 target_include_directories(PhantomBootstrapping PUBLIC 
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include/bootstrapping>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include/nn>
   $<INSTALL_INTERFACE:include>
   $<INSTALL_INTERFACE:include/bootstrapping>
+  $<INSTALL_INTERFACE:include/nn>
 )
 target_link_libraries(PhantomBootstrapping PUBLIC ntl gmp m pthread Phantom)
 

@@ -225,3 +225,5 @@ void example_bfv_multiply_benchmark();
 void example_kernel_fusing();
 
 void examples_ckks_bootstrapping();
+
+void example_nn(int target);

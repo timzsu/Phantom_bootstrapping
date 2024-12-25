@@ -5,6 +5,7 @@ add_executable(example_context
   3_ckks.cu
   4_kernel_fusing.cu
   5_bootstrapping.cu
+  6_nn.cu
   example.cu
 )
 
