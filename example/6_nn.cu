@@ -270,7 +270,7 @@ void example_nn(int target) {
   auto secret_key = std::make_shared<PhantomSecretKey>(*context);
   auto public_key = std::make_shared<PhantomPublicKey>(secret_key->gen_publickey(*context));
   auto relin_keys = std::make_shared<PhantomRelinKey>(secret_key->gen_relinkey(*context));
-  auto galois_keys = std::make_shared<PhantomGaloisKey>();
+  auto galois_keys = std::make_shared<PhantomGaloisKey>(secret_key->create_galois_keys(*context));
   
   auto encoder = std::make_shared<PhantomCKKSEncoder>(*context);
 

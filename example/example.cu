@@ -45,12 +45,8 @@ int main(int argc, char *argv[]) {
             examples_ckks_bootstrapping();
             return 0;
         }
-        if (selection == 6) {
-            example_nn(0);
-            example_nn(1);
-            example_nn(2);
-            example_nn(3);
-            example_nn(4);
+        if (selection >= 6) {
+            example_nn(selection-6);
             return 0;
         }
         return 0;
@@ -70,16 +66,16 @@ int main(int argc, char *argv[]) {
         int selection = 0;
         bool valid = true;
         do {
-            cout << endl << "> Run example (1 ~ 5) or exit (0): ";
+            cout << endl << "> Run example (1 ~ 10) or exit (0): ";
             if (!(cin >> selection)) {
                 valid = false;
-            } else if (selection < 0 || selection > 5) {
+            } else if (selection < 0 || selection > 10) {
                 valid = false;
             } else {
                 valid = true;
             }
             if (!valid) {
-                cout << "  [Beep~~] valid option: type 0 ~ 5" << endl;
+                cout << "  [Beep~~] valid option: type 0 ~ 10" << endl;
                 cin.clear();
                 cin.ignore(numeric_limits<streamsize>::max(), '\n');
             }
