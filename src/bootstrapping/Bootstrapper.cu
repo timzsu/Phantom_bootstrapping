@@ -449,7 +449,7 @@ void Bootstrapper::addBootKeys_other_keys(PhantomGaloisKey &gal_keys, vector<int
   }
 
   addLeftRotKeys_Linear_to_vector(gal_steps_vector);
-  //	for(auto num : gal_steps_vector) std::cout << num << " ";
+  //	for(auto num : gal_steps_vector) // std::cout << num << " ";
   //	cout << endl;
   ckks->decryptor.create_galois_keys_from_steps(gal_steps_vector, *(ckks->galois_keys));
 }
@@ -2860,13 +2860,13 @@ void Bootstrapper::modraise_inplace(PhantomCiphertext &cipher) {
 }
 
 void Bootstrapper::bootstrap_sparse(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
 
-  std::cout << "Subsum..." << endl;
+  // std::cout << "Subsum..." << endl;
   PhantomCiphertext rot;
   for (long i = logn; i < logNh; ++i) {
     ckks->evaluator.rotate_vector(cipher, (1 << i), *(ckks->galois_keys), rot);
@@ -2892,14 +2892,14 @@ void Bootstrapper::bootstrap_sparse(PhantomCiphertext &rtncipher, PhantomCiphert
   }
 
   else {
-    std::cout << "Coefftoslot..." << endl;
+    // std::cout << "Coefftoslot..." << endl;
     coefftoslot(rtn, cipher);
   }
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn;
   mod_reducer->modular_reduction(modrtn, rtn);
-  std::cout << "mod end" << endl;
+  // std::cout << "mod end" << endl;
 
   if (logn == 0) {
     const auto modulus = ckks->context->first_context_data().parms().coeff_modulus();
@@ -2926,7 +2926,7 @@ void Bootstrapper::bootstrap_sparse(PhantomCiphertext &rtncipher, PhantomCiphert
   }
 
   else {
-    std::cout << "Slottocoeff..." << endl;
+    // std::cout << "Slottocoeff..." << endl;
     slottocoeff(rtncipher, modrtn);
   }
   rtncipher.scale() = final_scale;
@@ -2938,13 +2938,13 @@ void Bootstrapper::bootstrap_full(PhantomCiphertext &rtncipher, PhantomCiphertex
   // chrono::microseconds diff;
   // start = chrono::high_resolution_clock::now();
 
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   // // for debugging
   // end = chrono::high_resolution_clock::now();
   // diff = chrono::duration_cast<chrono::milliseconds>(end - start);
-  // std::cout << "mod raise time : " << diff.count() / 1000 << " ms" << endl;
+  // // std::cout << "mod raise time : " << diff.count() / 1000 << " ms" << endl;
 
   const auto modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
@@ -2952,17 +2952,17 @@ void Bootstrapper::bootstrap_full(PhantomCiphertext &rtncipher, PhantomCiphertex
   // // for debugging
   // start = chrono::high_resolution_clock::now();
 
-  std::cout << "Coefftoslot...2" << endl;
+  // std::cout << "Coefftoslot...2" << endl;
   PhantomCiphertext rtn1, rtn2;
   coefftoslot_full(rtn1, rtn2, cipher);
 
   // // for debugging
   // end = chrono::high_resolution_clock::now();
   // diff = chrono::duration_cast<chrono::milliseconds>(end - start);
-  // std::cout << "coefftoslot time : " << diff.count() / 1000 << " ms" << endl;
+  // // std::cout << "coefftoslot time : " << diff.count() / 1000 << " ms" << endl;
   // start = chrono::high_resolution_clock::now();
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn1, modrtn2;
   mod_reducer->modular_reduction(modrtn1, rtn1);
   mod_reducer->modular_reduction(modrtn2, rtn2);
@@ -2970,16 +2970,16 @@ void Bootstrapper::bootstrap_full(PhantomCiphertext &rtncipher, PhantomCiphertex
   // // for debugging
   // end = chrono::high_resolution_clock::now();
   // diff = chrono::duration_cast<chrono::milliseconds>(end - start);
-  // std::cout << "mod reduction time : " << diff.count() / 1000 << " ms" << endl;
+  // // std::cout << "mod reduction time : " << diff.count() / 1000 << " ms" << endl;
   // start = chrono::high_resolution_clock::now();
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_full(rtncipher, modrtn1, modrtn2);
 
   // // for debugging
   // end = chrono::high_resolution_clock::now();
   // diff = chrono::duration_cast<chrono::milliseconds>(end - start);
-  // std::cout << "slottocoeff time : " << diff.count() / 1000 << " ms" << endl;
+  // // std::cout << "slottocoeff time : " << diff.count() / 1000 << " ms" << endl;
 
   rtncipher.scale() = final_scale;
 }
@@ -2988,11 +2988,11 @@ void Bootstrapper::bootstrap_sparse_3(PhantomCiphertext &rtncipher, PhantomCiphe
   // ModRaise
   // auto timer = Timer();
 
-  // std::cout << "Modulus Raising... ";
+  // // std::cout << "Modulus Raising... ";
   modraise_inplace(cipher);
 
   // timer.stop();
-  // std::cout << timer.duration<milliseconds>() << "ms\n";
+  // // std::cout << timer.duration<milliseconds>() << "ms\n";
   // ckks->print_decrypted_ct(cipher, 10);
 
   const auto modulus = ckks->context->first_context_data().parms().coeff_modulus();
@@ -3000,7 +3000,7 @@ void Bootstrapper::bootstrap_sparse_3(PhantomCiphertext &rtncipher, PhantomCiphe
 
   // timer.start();
 
-  // std::cout << "Subsum... ";
+  // // std::cout << "Subsum... ";
   PhantomCiphertext rot;
   for (auto i = logn; i < logNh; i++) {
     ckks->evaluator.rotate_vector(cipher, (1 << i), *(ckks->galois_keys), rot);
@@ -3008,7 +3008,7 @@ void Bootstrapper::bootstrap_sparse_3(PhantomCiphertext &rtncipher, PhantomCiphe
   }
 
   // timer.stop();
-  // std::cout << timer.duration<milliseconds>() << "ms\n";
+  // // std::cout << timer.duration<milliseconds>() << "ms\n";
   // ckks->print_decrypted_ct(cipher, 10);
 
   PhantomCiphertext rtn;
@@ -3032,23 +3032,23 @@ void Bootstrapper::bootstrap_sparse_3(PhantomCiphertext &rtncipher, PhantomCiphe
   else {
     // timer.start();
 
-    // std::cout << "Coeff-to-slot... ";
+    // // std::cout << "Coeff-to-slot... ";
     coefftoslot_3(rtn, cipher);
 
     // timer.stop();
-    // std::cout << timer.duration<milliseconds>() << "ms\n";
+    // // std::cout << timer.duration<milliseconds>() << "ms\n";
     // ckks->print_decrypted_ct(rtn, 10);
   }
 
   // Modular Reduction
   // timer.start();
 
-  // std::cout << "Modular reduction... ";
+  // // std::cout << "Modular reduction... ";
   PhantomCiphertext modrtn;
   mod_reducer->modular_reduction(modrtn, rtn);
 
   // timer.stop();
-  // std::cout << timer.duration<milliseconds>() << "ms\n";
+  // // std::cout << timer.duration<milliseconds>() << "ms\n";
   // ckks->print_decrypted_ct(modrtn, 10);
 
   if (logn == 0) {
@@ -3079,11 +3079,11 @@ void Bootstrapper::bootstrap_sparse_3(PhantomCiphertext &rtncipher, PhantomCiphe
   else {
     // timer.start();
 
-    // std::cout << "Slot-to-coeff... ";
+    // // std::cout << "Slot-to-coeff... ";
     slottocoeff_3(rtncipher, modrtn);
 
     // timer.stop();
-    // std::cout << timer.duration<milliseconds>() << "ms\n";
+    // // std::cout << timer.duration<milliseconds>() << "ms\n";
     // ckks->print_decrypted_ct(rtncipher, 10);
   }
 
@@ -3091,35 +3091,35 @@ void Bootstrapper::bootstrap_sparse_3(PhantomCiphertext &rtncipher, PhantomCiphe
 }
 
 void Bootstrapper::bootstrap_full_3(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
 
-  std::cout << "Coefftoslot...4" << endl;
+  // std::cout << "Coefftoslot...4" << endl;
   PhantomCiphertext rtn1, rtn2;
   coefftoslot_full_3(rtn1, rtn2, cipher);
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn1, modrtn2;
   mod_reducer->modular_reduction(modrtn1, rtn1);
   mod_reducer->modular_reduction(modrtn2, rtn2);
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_full_3(rtncipher, modrtn1, modrtn2);
 
   rtncipher.scale() = final_scale;
 }
 
 void Bootstrapper::bootstrap_sparse_real_3(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
 
-  std::cout << "Subsum..." << endl;
+  // std::cout << "Subsum..." << endl;
   PhantomCiphertext rot;
   for (long i = logn; i < logNh; ++i) {
     ckks->evaluator.rotate_vector(cipher, (1 << i), *(ckks->galois_keys), rot);
@@ -3145,11 +3145,11 @@ void Bootstrapper::bootstrap_sparse_real_3(PhantomCiphertext &rtncipher, Phantom
   }
 
   else {
-    std::cout << "Coefftoslot...5" << endl;
+    // std::cout << "Coefftoslot...5" << endl;
     coefftoslot_3(rtn, cipher);
   }
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn;
   mod_reducer->modular_reduction(modrtn, rtn);
 
@@ -3178,7 +3178,7 @@ void Bootstrapper::bootstrap_sparse_real_3(PhantomCiphertext &rtncipher, Phantom
   }
 
   else {
-    std::cout << "Slottocoeff..." << endl;
+    // std::cout << "Slottocoeff..." << endl;
     slottocoeff_half_3(rtncipher, modrtn);
   }
   rtncipher.scale() = final_scale;
@@ -3188,22 +3188,22 @@ void Bootstrapper::bootstrap_sparse_real_3(PhantomCiphertext &rtncipher, Phantom
 }
 
 void Bootstrapper::bootstrap_full_real_3(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto &modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
 
-  std::cout << "Coefftoslot...6" << endl;
+  // std::cout << "Coefftoslot...6" << endl;
   PhantomCiphertext rtn1, rtn2;
   coefftoslot_full_3(rtn1, rtn2, cipher);
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn1, modrtn2;
   mod_reducer->modular_reduction(modrtn1, rtn1);
   mod_reducer->modular_reduction(modrtn2, rtn2);
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_full_half_3(rtncipher, modrtn1, modrtn2);
 
   rtncipher.scale() = final_scale;
@@ -3213,13 +3213,13 @@ void Bootstrapper::bootstrap_full_real_3(PhantomCiphertext &rtncipher, PhantomCi
 }
 
 void Bootstrapper::bootstrap_sparse_hoisting(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto &modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
 
-  std::cout << "Subsum..." << endl;
+  // std::cout << "Subsum..." << endl;
   PhantomCiphertext rot;
   for (long i = logn; i < logNh; ++i) {
     ckks->evaluator.rotate_vector(cipher, (1 << i), *(ckks->galois_keys), rot);
@@ -3236,19 +3236,19 @@ void Bootstrapper::bootstrap_sparse_hoisting(PhantomCiphertext &rtncipher, Phant
   // Lazy rescaling from now on: No rescaling!!
   // NO NEED TO USE "ORIGINAL" METHODS OF EVALUATOR FROM NOW ON, AS THE SCALING FACTOR IS Delta^2
 
-  std::cout << "Coefftoslot...7" << endl;
+  // std::cout << "Coefftoslot...7" << endl;
   PhantomCiphertext rtn;
   coefftoslot_hoisting(rtn, cipher);
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn;
   mod_reducer->modular_reduction(modrtn, rtn);
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_hoisting(rtncipher, modrtn);
 }
 void Bootstrapper::bootstrap_full_hoisting(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto &modulus = ckks->context->first_context_data().parms().coeff_modulus();
@@ -3263,27 +3263,27 @@ void Bootstrapper::bootstrap_full_hoisting(PhantomCiphertext &rtncipher, Phantom
   // Lazy rescaling from now on: No rescaling!!
   // NO NEED TO USE "ORIGINAL" METHODS OF EVALUATOR FROM NOW ON, AS THE SCALING FACTOR IS Delta^2
 
-  std::cout << "Coefftoslot...8" << endl;
+  // std::cout << "Coefftoslot...8" << endl;
   PhantomCiphertext rtn1, rtn2;
   coefftoslot_full_hoisting(rtn1, rtn2, cipher);
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn1, modrtn2;
   mod_reducer->modular_reduction(modrtn1, rtn1);
   mod_reducer->modular_reduction(modrtn2, rtn2);
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_full_hoisting(rtncipher, modrtn1, modrtn2);
 }
 
 void Bootstrapper::bootstrap_one_depth(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto &modulus = ckks->context->first_context_data().parms().coeff_modulus();
   cipher.scale() = ((double)modulus[0].value());
 
-  std::cout << "Subsum..." << endl;
+  // std::cout << "Subsum..." << endl;
   PhantomCiphertext rot;
   for (long i = logn; i < logNh; ++i) {
     ckks->evaluator.rotate_vector(cipher, (1 << i), *(ckks->galois_keys), rot);
@@ -3300,20 +3300,20 @@ void Bootstrapper::bootstrap_one_depth(PhantomCiphertext &rtncipher, PhantomCiph
   // Lazy rescaling from now on: No rescaling!!
   // NO NEED TO USE "ORIGINAL" METHODS OF EVALUATOR FROM NOW ON, AS THE SCALING FACTOR IS Delta^2
 
-  std::cout << "Coefftoslot...9" << endl;
+  // std::cout << "Coefftoslot...9" << endl;
   PhantomCiphertext rtn;
   coefftoslot_one_depth(rtn, cipher);
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn;
   mod_reducer->modular_reduction(modrtn, rtn);
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_one_depth(rtncipher, modrtn);
 }
 
 void Bootstrapper::bootstrap_more_depth(PhantomCiphertext &rtncipher, PhantomCiphertext &cipher) {
-  std::cout << "Modulus Raising..." << endl;
+  // std::cout << "Modulus Raising..." << endl;
   modraise_inplace(cipher);
 
   const auto &modulus = ckks->context->first_context_data().parms().coeff_modulus();
@@ -3328,16 +3328,16 @@ void Bootstrapper::bootstrap_more_depth(PhantomCiphertext &rtncipher, PhantomCip
   // Lazy rescaling from now on: No rescaling!!
   // NO NEED TO USE "ORIGINAL" METHODS OF EVALUATOR FROM NOW ON, AS THE SCALING FACTOR IS Delta^2
 
-  std::cout << "Coefftoslot...10" << endl;
+  // std::cout << "Coefftoslot...10" << endl;
   PhantomCiphertext rtn1, rtn2;
   coefftoslot_full_mul_first(rtn1, rtn2, cipher);
 
-  std::cout << "Modular reduction..." << endl;
+  // std::cout << "Modular reduction..." << endl;
   PhantomCiphertext modrtn1, modrtn2;
   mod_reducer->modular_reduction(modrtn1, rtn1);
   mod_reducer->modular_reduction(modrtn2, rtn2);
 
-  std::cout << "Slottocoeff..." << endl;
+  // std::cout << "Slottocoeff..." << endl;
   slottocoeff_full_one_depth(rtncipher, modrtn1, modrtn2);
 }
 
