@@ -2,27 +2,6 @@ cmake_minimum_required(VERSION 3.26)
 
 project(PhantomBootstrapping VERSION 1.0 LANGUAGES CXX CUDA)
 
-# Apply the patch
-message(STATUS "Detecting whether patch is applied")
-execute_process(
-  COMMAND git apply ${CMAKE_SOURCE_DIR}/cmake/phantom-fhe.patch --reverse --check
-  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/extern/phantom-fhe"
-  OUTPUT_QUIET
-  ERROR_VARIABLE PATCH_APPLIED_ERR
-)
-
-if (PATCH_APPLIED_ERR)
-  message(STATUS "Patch is not applied. Applying patch")
-  execute_process(
-    COMMAND git apply ${CMAKE_SOURCE_DIR}/cmake/phantom-fhe.patch
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/extern/phantom-fhe"
-    OUTPUT_QUIET
-    ERROR_QUIET
-    COMMAND_ERROR_IS_FATAL ANY
-  )
-  message(STATUS "Patch applied. ")
-endif()
-
 # CMAKE config
 if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
   set(CMAKE_BUILD_TYPE Release)

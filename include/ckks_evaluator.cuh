@@ -2,6 +2,7 @@
 
 #include <complex>
 
+#include "evaluate.cuh"
 #include "phantom.h"
 
 namespace nexus {
@@ -53,6 +54,19 @@ class Encoder {
     encoder->encode(*context, complex_values, scale, plain);
   }
 
+  inline void encode(vector<cuDoubleComplex> complex_values, size_t chain_index, double scale, PhantomPlaintext &plain) {
+    if (complex_values.size() == 1) {
+      encode(complex_values[0], scale, plain);
+      return;
+    }
+    complex_values.resize(encoder->slot_count(), make_cuDoubleComplex(0, 0));
+    encoder->encode(*context, complex_values, scale, plain, chain_index);
+  }
+  
+  inline void encode(vector<cuDoubleComplex> complex_values, double scale, PhantomPlaintext &plain) {
+    encode(complex_values, 1, scale, plain);
+  }
+
   // Value inputs (fill all slots with that value)
   inline void encode(double value, size_t chain_index, double scale, PhantomPlaintext &plain) {
     vector<double> values(encoder->slot_count(), value);
@@ -68,6 +82,20 @@ class Encoder {
     vector<complex<double>> complex_values(encoder->slot_count(), complex_value);
     encoder->encode(*context, complex_values, scale, plain);
   }
+
+  inline void encode(cuDoubleComplex complex_value, double scale, PhantomPlaintext &plain) {
+    vector<cuDoubleComplex> complex_values(encoder->slot_count(), complex_value);
+    encoder->encode(*context, complex_values, scale, plain);
+  }
+
+  inline void encode(phantom::util::cuda_auto_ptr<cuDoubleComplex>& cuda_ptr, size_t chain_index, double scale, PhantomPlaintext &plain) {
+    encoder->encode(*context, cuda_ptr, scale, plain, chain_index);
+  }
+  
+  inline void encode(phantom::util::cuda_auto_ptr<cuDoubleComplex>& cuda_ptr, double scale, PhantomPlaintext &plain) {
+    encoder->encode(*context, cuda_ptr, scale, plain);
+  }
+
 
   template <typename T, typename = std::enable_if_t<std::is_same<std::remove_cv_t<T>, double>::value || std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
   inline void decode(PhantomPlaintext &plain, vector<T> &values) {
@@ -240,6 +268,30 @@ class Evaluator {
   inline void rotate_vector_inplace(PhantomCiphertext &ct, int steps, PhantomGaloisKey &galois_keys) {
     ::rotate_vector_inplace(*context, ct, steps, galois_keys);
     cudaStreamSynchronize(ct.data_ptr().get_stream());  // this is currently required, rotation is unstable
+  }
+  
+  inline std::vector<PhantomCiphertext> rotate_batched_vector(PhantomCiphertext &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys) {
+    std::vector<PhantomCiphertext> dest;
+    ::batched_rotation_inplace(*context, ct, dest, galois_keys, steps);
+    cudaStreamSynchronize(ct.data_ptr().get_stream());  // this is currently required, rotation is unstable
+    return dest;
+  }
+  
+  inline PhantomCiphertext rotate_batched_vector(const std::vector<PhantomCiphertext> &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys) {
+    PhantomCiphertext dest;
+    ::batched_rotation_inplace(*context, ct, dest, galois_keys, steps);
+    cudaStreamSynchronize(dest.data_ptr().get_stream());  // this is currently required, rotation is unstable
+    return dest;
+  }
+  
+  inline void rotate_batched_vector_inplace(PhantomCiphertext &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys, std::vector<PhantomCiphertext> &dest) {
+    ::batched_rotation_inplace(*context, ct, dest, galois_keys, steps);
+    cudaStreamSynchronize(ct.data_ptr().get_stream());  // this is currently required, rotation is unstable
+  }
+  
+  inline void rotate_batched_vector_inplace(const std::vector<PhantomCiphertext> &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys, PhantomCiphertext &dest) {
+    ::batched_rotation_inplace(*context, ct, dest, galois_keys, steps);
+    cudaStreamSynchronize(dest.data_ptr().get_stream());  // this is currently required, rotation is unstable
   }
 
   // Negation
@@ -419,6 +471,10 @@ class Decryptor {
 
   inline void create_galois_keys_from_elts(vector<uint32_t> &elts, PhantomGaloisKey &galois_keys) {
     galois_keys = decryptor->create_galois_keys_from_elts(*context, elts);
+  }
+  
+  inline int invariant_noise_budget(PhantomCiphertext &ct) {
+    return decryptor->invariant_noise_budget(*context, ct);
   }
 };
 

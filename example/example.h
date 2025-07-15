@@ -3,7 +3,6 @@
 #include <iomanip>
 #include <iostream>
 #include "phantom.h"
-#include "context.cuh"
 
 #define EPSINON 0.001
 #define complex_equ(a, b) ((fabs(a.x - b.x) < EPSINON) && (fabs(a.y - b.y) < EPSINON))

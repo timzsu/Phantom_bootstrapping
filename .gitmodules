@@ -1,3 +1,4 @@
 [submodule "extern/phantom-fhe"]
 	path = extern/phantom-fhe
-	url = git@github.com:encryptorion-lab/phantom-fhe.git
+	url = https://github.com/timzsu/phantom-fhe.git
+	branch = nexus-dev

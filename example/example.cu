@@ -1,4 +1,3 @@
-#include <iostream>
 #include "example.h"
 
 using namespace std;
