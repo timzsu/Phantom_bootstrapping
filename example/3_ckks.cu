@@ -1,3 +1,4 @@
+#include "evaluate.cuh"
 #include "example.h"
 #include "utils.cuh"
 
@@ -506,6 +507,73 @@ void example_ckks_mul(PhantomContext &context, const double &scale) {
     y_msg.clear();
 }
 
+void example_ckks_hoisting(PhantomContext &context, const double &scale) {
+    std::cout << "Example: CKKS Batched rotations test" << std::endl;
+
+    std::vector<int> steps(16);
+    std::iota(steps.begin(), steps.end(), 0);
+
+    // KeyGen
+    PhantomSecretKey secret_key(context);
+    PhantomPublicKey public_key = secret_key.gen_publickey(context);
+    PhantomGaloisKey galois_keys = secret_key.create_galois_keys_from_steps(context, steps);
+
+    PhantomCKKSEncoder encoder(context);
+    size_t slot_count = encoder.slot_count();
+
+    vector<cuDoubleComplex> x_msg, result, gt;
+    for (size_t i = 0; i < slot_count; i++) {
+        double rand_real = (double) rand() / RAND_MAX;
+        double rand_imag = (double) rand() / RAND_MAX;
+        x_msg.push_back(make_cuDoubleComplex(rand_real, rand_imag));
+    }
+    cout << "Message vector: " << endl;
+    print_vector(x_msg, 3, 3);
+
+    PhantomPlaintext pt;
+    PhantomCiphertext ct, gtct;
+
+    encoder.encode(context, x_msg, scale, pt);
+    public_key.encrypt_asymmetric(context, pt, ct);
+    mod_switch_to_next_inplace(context, ct);
+
+    cout << "Compute, hoisting vector x." << endl;
+    nexus::Timer timer;
+
+    std::vector<PhantomCiphertext> tmp(steps.size());
+    timer.start();
+    for (size_t i = 0; i < steps.size(); i++) {
+        tmp[i] = rotate_vector(context, ct, steps[i], galois_keys);
+    }
+    add_many(context, tmp, gtct);
+    timer.stop<chrono::microseconds>("Simple rotation time (us): ");
+
+    timer.start();
+    hoisting_inplace(context, ct, galois_keys, steps);
+    timer.stop<chrono::microseconds>("Hoisted rotation time (us): ");
+    
+    secret_key.decrypt(context, ct, pt);
+    encoder.decode(context, pt, result);
+    cout << "Result vector: " << endl;
+    print_vector(result, 5, 3);
+    
+    secret_key.decrypt(context, gtct, pt);
+    encoder.decode(context, pt, gt);
+    cout << "Gt vector: " << endl;
+    print_vector(gt, 5, 3);
+
+    bool correctness = true;
+    for (size_t j = 0; j < slot_count; j++) {
+        correctness &= result[j] == gt[j];
+    }
+    if (!correctness)
+        throw std::logic_error("Homomorphic hoisting error");
+    result.clear();
+
+    std::cout << "[OK] Example: CKKS Batched rotations test" << std::endl;
+
+}
+
 void example_ckks_hoisting_1_to_many(PhantomContext &context, const double &scale) {
     std::cout << "Example: CKKS Batched rotations test --- 1 to many" << std::endl;
 
@@ -886,6 +954,7 @@ void examples_ckks() {
         example_ckks_mul(context, scale);
         example_ckks_rotation(context, scale);
         example_ckks_hoisting_1_to_many(context, scale);
+        example_ckks_hoisting(context, scale);
         example_ckks_hoisting_many_to_1(context, scale);
     }
     cout << endl;

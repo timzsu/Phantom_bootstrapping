@@ -97,7 +97,7 @@ class Encoder {
   }
 
 
-  template <typename T, typename = std::enable_if_t<std::is_same<std::remove_cv_t<T>, double>::value || std::is_same<std::remove_cv_t<T>, std::complex<double>>::value>>
+  template <typename T, typename = std::enable_if_t<std::is_same<std::remove_cv_t<T>, double>::value || std::is_same<std::remove_cv_t<T>, std::complex<double>>::value || std::is_same<std::remove_cv_t<T>, cuDoubleComplex>::value>>
   inline void decode(PhantomPlaintext &plain, vector<T> &values) {
     encoder->decode(*context, plain, values);
   }
@@ -289,9 +289,16 @@ class Evaluator {
     cudaStreamSynchronize(ct.data_ptr().get_stream());  // this is currently required, rotation is unstable
   }
   
-  inline void rotate_batched_vector_inplace(const std::vector<PhantomCiphertext> &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys, PhantomCiphertext &dest) {
+  inline void rotate_batched_vector_inplace(std::vector<PhantomCiphertext> &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys, PhantomCiphertext &dest) {
     ::batched_rotation_inplace(*context, ct, dest, galois_keys, steps);
-    cudaStreamSynchronize(dest.data_ptr().get_stream());  // this is currently required, rotation is unstable
+  }
+
+  inline void rotate_batched_vector_standard(PhantomCiphertext &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys, std::vector<PhantomCiphertext> &dest) {
+    ::batched_rotation_standard(*context, ct, dest, galois_keys, steps);
+  }
+
+  inline void rotate_sum_inplace(PhantomCiphertext &ct, const std::vector<int> &steps, PhantomGaloisKey &galois_keys) {
+    ::hoisting_inplace(*context, ct, galois_keys, steps);
   }
 
   // Negation
